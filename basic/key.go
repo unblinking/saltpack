@@ -7,7 +7,7 @@ import (
 	"crypto/rand"
 
 	"github.com/agl/ed25519"
-	"github.com/keybase/client/go/saltpack"
+	"github.com/keybase/saltpack"
 	"golang.org/x/crypto/nacl/box"
 )
 

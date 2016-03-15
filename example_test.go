@@ -3,10 +3,11 @@ package saltpack_test
 import (
 	"bytes"
 	"fmt"
-	"github.com/keybase/client/go/saltpack"
-	"github.com/keybase/client/go/saltpack/basic"
 	"io"
 	"os"
+
+	"github.com/keybase/saltpack"
+	"github.com/keybase/saltpack/basic"
 )
 
 func ExampleEncryptArmor62Seal() {

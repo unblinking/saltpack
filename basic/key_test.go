@@ -3,8 +3,9 @@ package basic
 import (
 	"bytes"
 	"crypto/rand"
-	"github.com/keybase/client/go/saltpack"
 	"testing"
+
+	"github.com/keybase/saltpack"
 )
 
 func randomMsg(t *testing.T, sz int) []byte {

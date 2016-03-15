@@ -9,7 +9,7 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/keybase/client/go/encoding/basex"
+	"github.com/keybase/saltpack/encoding/basex"
 )
 
 func encryptArmor62RandomData(t *testing.T, sz int) ([]byte, string) {

@@ -173,16 +173,16 @@ Recipients parse the header of a message using the following steps:
    is the **recipient index**.
 7. Open the **sender secretbox** using
    [`crypto_secretbox_open`](http://nacl.cr.yp.to/secretbox.html) with the
-   **payload key** from #7 and the nonce `saltpack_sender_key_sbox`
+   **payload key** from #6 and the nonce `saltpack_sender_key_sbox`
 8. Compute the recipient's **MAC key** by encrypting 32 zero bytes using
    [`crypto_box`](http://nacl.cr.yp.to/box.html) with the recipient's private
-   key, the sender's public key from #8, and the first 24 bytes of the **header
+   key, the sender's public key from #7, and the first 24 bytes of the **header
    hash** from #2 as a nonce. The **MAC key** is the last 32 bytes of the
    resulting box.
 
 If the recipient's public key is shown in the **recipients list** (that is, if
 the recipient is not anonymous), clients may skip all the other **payload key
-boxes** in step #7.
+boxes** in step #6.
 
 When parsing lists in general, if a list is longer than expected, clients
 should allow the extra fields and ignore them. That allows us to make future

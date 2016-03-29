@@ -168,7 +168,7 @@ Recipients parse the header of a message using the following steps:
    public key** and the recipient's private key.
 6. Try to open each of the **payload key boxes** in the recipients list using
    [`crypto_box_open_afternm`](http://nacl.cr.yp.to/box.html), the precomputed
-   secret from #6, and the nonce `saltpack_payload_key_box`. Successfully
+   secret from #5, and the nonce `saltpack_payload_key_box`. Successfully
    opening one gives the **payload key**, and the index of the box that worked
    is the **recipient index**.
 7. Open the **sender secretbox** using

@@ -1,3 +1,9 @@
+**Note to implementers**: The [moderncrypto.org
+thread](https://moderncrypto.org/mail-archive/messaging/2016/thread.html#2070)
+on saltpack brought up an issue with our nonces, which weakens the anonymity of
+receivers. Fixing this requires backwards-incompatible changes, and will likely
+lead to a version 2 of this spec.
+
 # Saltpack Binary Encryption Format
 
 The main building block of our encrypted message format is NaCl's

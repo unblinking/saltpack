@@ -263,7 +263,7 @@ Before getting to the BaseX payload, the decoder parses the header and footer:
 3. Assert that the header (with its whitespace stripped in step 1) matches
 
    ```
-   BEGIN([a-zA-Z0-9]+ )?SALTPACK(ENCRYPTEDMESSAGE)|(SIGNEDMESSAGE)|(DETACHEDSIGNATURE)
+   BEGIN([a-zA-Z0-9]+)?SALTPACK(ENCRYPTEDMESSAGE)|(SIGNEDMESSAGE)|(DETACHEDSIGNATURE)
    ```
 
    The optional word is for an application name (like `KEYBASE`). The last two

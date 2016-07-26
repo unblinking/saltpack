@@ -5,6 +5,7 @@ package saltpack
 
 import (
 	"strings"
+	"regexp"
 )
 
 type headerOrFooterMarker string
@@ -66,12 +67,16 @@ func getStringForType(typ MessageType) string {
 
 func parseFrame(m string, typ MessageType, hof headerOrFooterMarker) (brand string, err error) {
 
+	// strip whitespace
+	re := regexp.MustCompile("[^\\S+]{1,}")
+	s := re.ReplaceAllString(m, " ")
+
 	sffx := getStringForType(typ)
 	if len(sffx) == 0 {
 		err = makeErrBadFrame("Message type %v not found", typ)
 		return
 	}
-	v := strings.Split(m, " ")
+	v := strings.Split(s, " ")
 	if len(v) != 4 && len(v) != 5 {
 		err = makeErrBadFrame("wrong number of words (%d)", len(v))
 		return

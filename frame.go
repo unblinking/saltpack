@@ -68,7 +68,7 @@ func getStringForType(typ MessageType) string {
 func parseFrame(m string, typ MessageType, hof headerOrFooterMarker) (brand string, err error) {
 
 	// strip whitespace
-	re := regexp.MustCompile(">|[^\\S+]{1,}")
+	re := regexp.MustCompile("[>\\s]+")
 	s := re.ReplaceAllString(m, " ")
 
 	sffx := getStringForType(typ)

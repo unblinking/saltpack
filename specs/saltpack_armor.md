@@ -206,7 +206,7 @@ overflow the extra zero bytes. (There are as many padding bytes as there are
 padding digits, and the digits only go up to 84.) So when the padding bytes are
 stripped, what's left ends up being the same as what was encoded.
 
-We could've generalized this padding scheme to other bases and block sizes. We
+We could've generalized this padding scheme to other bases and block sizes. We}
 would have to be careful with the padding characters, though. We'd want to
 strip off as many output characters as possible without overflowing the padding
 bytes, and at larger block sizes this is more than one-character-per-byte.
@@ -255,31 +255,31 @@ ipsum](https://twitter.com/oconnor663/status/680171387353448448).
 
 ## Framing the BaseX Payload
 
-Before getting to the BaseX payload, the decoder parses the header and footer:
+The BaseX payload is surrounded ('framed') by a header and footer. Rules for parsing
+them appear here.
 
-1. Strip all whitespace and `>` characters from the message. (`>` is for
-   compatibility with email clients that use it for quoting.)
-2. Collect input up to the first period. This is the header.
-3. Assert that the header (with its whitespace stripped in step 1) matches
-
-   ```
-   BEGIN([a-zA-Z0-9]+)?SALTPACK(ENCRYPTEDMESSAGE)|(SIGNEDMESSAGE)|(DETACHEDSIGNATURE)
-   ```
-
-   The optional word is for an application name (like `KEYBASE`). The last two
-   words give the mode of the message.
-4. Collect input up to the second period. This is the payload. If the
-   implementation is streaming, it may decode the payload before the following
-   steps.
+1. Collect input up to the first period. This is the header.
+2. Convert all whitespace to spaces, for easy parsing. For example, in Go we match with
+   the regex `[>\\s]+`, which catches all characters in the union of whitespace
+   and `>` (`>` is for compatibility with mail clients that use it for quoting).
+3. Parse the header, asserting that each word matches the expectation. The key checks
+   here are:
+      1. In a header, the first word should be `BEGIN`.
+      2. The next word is the brand, which only needs to match the regex `([a-zA-Z0-9]+)?`.
+         That is to say, alphanumeric or omitted entirely. For example, `KEYBASE`.
+      3. After the brand is the message type. This can be `ENCRYPTED MESSAGE`, `SIGNED
+         MESSAGE`, or `DETACHED SIGNATURE`.
+4. Collect input up to the second period. This is the payload. If the implementation
+   is streaming, it may decode the payload before the following steps.
 5. Collect input up to the third period. This is the footer.
-6. Assert that the footer matches the header, with `END` instead of `BEGIN`.
+6. Assert that the footer matches the header, with `END` instead of `BEGIN` as the first word.
 
 We use periods to delimit the header and footer to make parsing easier.
 Although we've been careful to avoid special characters in the payload, we're
 not worried about these periods getting garbled (into `…` for example), because
 they only occur one at a time.
 
-The payload is decoded like this:
+The payload is decoded as follows:
 
 1. Chunk the characters into blocks of 43. The last block may be short.
 2. Decode each of these blocks with BaseX, using the 62-character alphabet

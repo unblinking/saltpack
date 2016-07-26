@@ -267,7 +267,8 @@ them appear here.
       1. In a header, the first word should be `BEGIN`.
       2. The next word is the brand, which only needs to match the regex `([a-zA-Z0-9]+)?`.
          That is to say, alphanumeric or omitted entirely. For example, `KEYBASE`.
-      3. After the brand is the message type. This can be `ENCRYPTED MESSAGE`, `SIGNED
+			3. The next word should always be `SALTPACK`.
+      4. After the brand is the message type. This can be `ENCRYPTED MESSAGE`, `SIGNED
          MESSAGE`, or `DETACHED SIGNATURE`.
 4. Collect input up to the second period. This is the payload. If the implementation
    is streaming, it may decode the payload before the following steps.

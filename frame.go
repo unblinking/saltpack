@@ -69,7 +69,7 @@ func parseFrame(m string, typ MessageType, hof headerOrFooterMarker) (brand stri
 
 	// strip whitespace
 	re := regexp.MustCompile("[>\\s]+")
-	s := re.ReplaceAllString(m, " ")
+	s := strings.TrimSpace(re.ReplaceAllString(m, " "))
 
 	sffx := getStringForType(typ)
 	if len(sffx) == 0 {

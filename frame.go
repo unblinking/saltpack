@@ -67,8 +67,9 @@ func getStringForType(typ MessageType) string {
 
 func parseFrame(m string, typ MessageType, hof headerOrFooterMarker) (brand string, err error) {
 
-	// strip whitespace
-	re := regexp.MustCompile("[>\\s]+")
+	// replace blocks of characters in the set [>\n\r\t ] with a single space, so that Go
+	// can easily parse each piece
+	re := regexp.MustCompile("[>\n\r\t ]+")
 	s := strings.TrimSpace(re.ReplaceAllString(m, " "))
 
 	sffx := getStringForType(typ)

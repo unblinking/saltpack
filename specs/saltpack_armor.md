@@ -277,8 +277,8 @@ they only occur one at a time.
 
 The payload is decoded as follows:
 
-1. Chunk the characters into blocks of 43. The last block may be short.
-2. Strip all characters that match the regex `[>\n\r\t ]`.
+1. Strip all characters that match the regex `[>\n\r\t ]`.
+2. Chunk the characters into blocks of 43. The last block may be short.
 3. Decode each of these blocks with BaseX, using the 62-character alphabet
    `0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz` (all the
    digits and letters, in ASCII order).

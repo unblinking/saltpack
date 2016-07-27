@@ -206,7 +206,7 @@ overflow the extra zero bytes. (There are as many padding bytes as there are
 padding digits, and the digits only go up to 84.) So when the padding bytes are
 stripped, what's left ends up being the same as what was encoded.
 
-We could've generalized this padding scheme to other bases and block sizes. We}
+We could've generalized this padding scheme to other bases and block sizes. We
 would have to be careful with the padding characters, though. We'd want to
 strip off as many output characters as possible without overflowing the padding
 bytes, and at larger block sizes this is more than one-character-per-byte.
@@ -261,13 +261,12 @@ them appear here.
 1. Collect input up to the first period. This is the header.
 2. Assert that the header matches the regex
    ```
-   [>\n\r\t ]+BEGIN[>\n\r\t ]+([a-zA-Z0-9]+)?[>\n\r\t ]+SALTPACK[>\n\r\t ]+(ENCRYPTED[>\n\r\t ]+MESSAGE)|(SIGNED[>\n\r\t ]+MESSAGE)|(DETACHED[>\n\r\t ]+SIGNATURE)[>\n\r\t ]+
+   [>\n\r\t ]*BEGIN[>\n\r\t ]+([a-zA-Z0-9]+)?[>\n\r\t ]+SALTPACK[>\n\r\t ]+(ENCRYPTED[>\n\r\t ]+MESSAGE)|(SIGNED[>\n\r\t ]+MESSAGE)|(DETACHED[>\n\r\t ]+SIGNATURE)[>\n\r\t ]*
    ```
    The optional word is an application name (like 'KEYBASE'). The last two words give the
    mode of the message.
-3. Collect input up to the second period. This is the payload. Before decoding, strip all
-   characters that match the regex `[>\n\r\t ]`. If the implementation is streaming, it
-   may decode the payload before the following steps.
+3. Collect input up to the second period. This is the payload. If the implementation is
+   streaming, it may decode the payload before the following steps.
 4. Collect input up to the third period. This is the footer.
 5. Assert that the footer matches the header, with `END` instead of `BEGIN`.
 
@@ -279,7 +278,8 @@ they only occur one at a time.
 The payload is decoded as follows:
 
 1. Chunk the characters into blocks of 43. The last block may be short.
-2. Decode each of these blocks with BaseX, using the 62-character alphabet
+2. Strip all characters that match the regex `[>\n\r\t ]`.
+3. Decode each of these blocks with BaseX, using the 62-character alphabet
    `0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz` (all the
    digits and letters, in ASCII order).
 

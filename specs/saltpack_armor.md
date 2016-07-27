@@ -258,36 +258,18 @@ ipsum](https://twitter.com/oconnor663/status/680171387353448448).
 The BaseX payload is surrounded ('framed') by a header and footer. Rules for parsing
 them appear here.
 
-0. For this section, consider the "stripping set" to be the union of all whitespace and
-   the `>` character (for compatibility with mail clients).
 1. Collect input up to the first period. This is the header.
-2. Within the header, convert all blocks of characters in the stripping set to single spaces.
-   That is to say, any contiguous substring of the header where all characters are in the
-   stripping set should be converted to a single space. Then, strip any leading or trailing
-   whitespace. For example, the string
-```
-\n> BEGIN KEYBASE      SALTPACK\n   ENCRYPTED\t\t    MESSAGE
-```
-   should become
-```
-BEGIN KEYBASE SALTPACK ENCRYPTED MESSAGE
-```.
-2. Convert all whitespace to a single space for easy parsing. For example, in Go we match with
-   the regex `[>\\s]+`, which catches all characters in the union of whitespace
-   and `>` (`>` is for compatibility with mail clients that use it for quoting).
-3. Parse the header, asserting that each word matches the expectation. The key checks
-   here are:
-      1. In a header, the first word should be `BEGIN`.
-      2. The next word is the brand, which only needs to match the regex `([a-zA-Z0-9]+)?`.
-         That is to say, alphanumeric or omitted entirely. For example, `KEYBASE`.
-			3. The next word should always be `SALTPACK`.
-      4. After the brand is the message type. This can be `ENCRYPTED MESSAGE`, `SIGNED
-         MESSAGE`, or `DETACHED SIGNATURE`.
-4. Collect input up to the second period. This is the payload. Remove all characters in the
-   stripping set before decoding. If the implementation is streaming, it may decode the
-   payload before the following steps.
-5. Collect input up to the third period. This is the footer.
-6. Assert that the footer matches the header, with `END` instead of `BEGIN` as the first word.
+2. Assert that the header matches the regex
+   ```
+   [>\n\r\t ]+BEGIN[>\n\r\t ]+([a-zA-Z0-9]+)?[>\n\r\t ]+SALTPACK[>\n\r\t ]+(ENCRYPTED[>\n\r\t ]+MESSAGE)|(SIGNED[>\n\r\t ]+MESSAGE)|(DETACHED[>\n\r\t ]+SIGNATURE)[>\n\r\t ]+
+   ```
+   The optional word is an application name (like 'KEYBASE'). The last two words give the
+   mode of the message.
+3. Collect input up to the second period. This is the payload. Before decoding, strip all
+   characters that match the regex `[>\n\r\t ]`. If the implementation is streaming, it
+   may decode the payload before the following steps.
+4. Collect input up to the third period. This is the footer.
+5. Assert that the footer matches the header, with `END` instead of `BEGIN`.
 
 We use periods to delimit the header and footer to make parsing easier.
 Although we've been careful to avoid special characters in the payload, we're

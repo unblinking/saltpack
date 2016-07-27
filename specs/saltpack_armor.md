@@ -255,34 +255,31 @@ ipsum](https://twitter.com/oconnor663/status/680171387353448448).
 
 ## Framing the BaseX Payload
 
-Before getting to the BaseX payload, the decoder parses the header and footer:
+The BaseX payload is surrounded ('framed') by a header and footer. Rules for parsing
+them appear here.
 
-1. Strip all whitespace and `>` characters from the message. (`>` is for
-   compatibility with email clients that use it for quoting.)
-2. Collect input up to the first period. This is the header.
-3. Assert that the header (with its whitespace stripped in step 1) matches
-
+1. Collect input up to the first period. This is the header.
+2. Assert that the header matches the regex
    ```
-   BEGIN([a-zA-Z0-9]+)?SALTPACK(ENCRYPTEDMESSAGE)|(SIGNEDMESSAGE)|(DETACHEDSIGNATURE)
+   [>\n\r\t ]*BEGIN[>\n\r\t ]+([a-zA-Z0-9]+)?[>\n\r\t ]+SALTPACK[>\n\r\t ]+(ENCRYPTED[>\n\r\t ]+MESSAGE)|(SIGNED[>\n\r\t ]+MESSAGE)|(DETACHED[>\n\r\t ]+SIGNATURE)[>\n\r\t ]*
    ```
-
-   The optional word is for an application name (like `KEYBASE`). The last two
-   words give the mode of the message.
-4. Collect input up to the second period. This is the payload. If the
-   implementation is streaming, it may decode the payload before the following
-   steps.
-5. Collect input up to the third period. This is the footer.
-6. Assert that the footer matches the header, with `END` instead of `BEGIN`.
+   The optional word is an application name (like 'KEYBASE'). The last two words give the
+   mode of the message.
+3. Collect input up to the second period. This is the payload. If the implementation is
+   streaming, it may decode the payload before the following steps.
+4. Collect input up to the third period. This is the footer.
+5. Assert that the footer matches the header, with `END` instead of `BEGIN`.
 
 We use periods to delimit the header and footer to make parsing easier.
 Although we've been careful to avoid special characters in the payload, we're
 not worried about these periods getting garbled (into `…` for example), because
 they only occur one at a time.
 
-The payload is decoded like this:
+The payload is decoded as follows:
 
 1. Chunk the characters into blocks of 43. The last block may be short.
-2. Decode each of these blocks with BaseX, using the 62-character alphabet
+2. Strip all characters that match the regex `[>\n\r\t ]`.
+3. Decode each of these blocks with BaseX, using the 62-character alphabet
    `0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz` (all the
    digits and letters, in ASCII order).
 

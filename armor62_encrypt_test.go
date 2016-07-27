@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"io/ioutil"
 	"testing"
+	"strings"
 
 	"github.com/keybase/saltpack/encoding/basex"
 )
@@ -71,6 +72,23 @@ func TestDearmor62DecryptSlowReader(t *testing.T) {
 	if !bytes.Equal(plaintext, msg) {
 		t.Fatalf("bad message back out")
 	}
+}
+
+func TestNewlineInFrame(t *testing.T) {
+	plaintext, ciphertext := encryptArmor62RandomData(t, 1024)
+
+	//newline space space tab space
+	ss := []string{"\n\n>   ", ciphertext[0:10], "\n  	 ", ciphertext[11:]}
+	ciphertext = strings.Join(ss, "")
+
+	_, plaintext2, brand, err := Dearmor62DecryptOpen(ciphertext, kr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(plaintext, plaintext2) {
+		t.Fatalf("bad message back out")
+	}
+	brandCheck(t, brand)
 }
 
 func TestBadArmor62(t *testing.T) {

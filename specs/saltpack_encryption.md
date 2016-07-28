@@ -147,9 +147,9 @@ header:
 
 Encrypting the sender's long-term public key in step #3 allows Alice to stay
 anonymous to Mallory. If Alice wants to be anonymous to Bob as well, she can
-reuse the ephemeral key as her sender key. When the ephemeral key and the
-sender key are the same, clients may indicate that a message is "intentionally
-anonymous" as opposed to "from an unknown sender".
+reuse the ephemeral keypair as her own in steps #3 and #9. When the ephemeral
+key and the sender key are the same, clients may indicate that a message is
+"intentionally anonymous" as opposed to "from an unknown sender".
 
 Using the same nonce for each **payload key box** might raise a concern: Are we
 violating the rule against nonce reuse, if for example the recipients list

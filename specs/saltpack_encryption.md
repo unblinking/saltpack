@@ -141,9 +141,10 @@ header:
 
 9. For each recipient, encrypt 32 zero bytes using
    [`crypto_box`](http://nacl.cr.yp.to/box.html) with the recipient's public
-   key, the sender's long-term private key, and the first 24 bytes of the
-   **header hash** from #8 as a nonce. Take the last 32 bytes of each box.
-   These are the **MAC keys**.
+   key, the sender's long-term private key (or the ephemeral private key if
+   the sender is anonymous), and the first 24 bytes of the **header hash**
+   from #8 as a nonce. Take the last 32 bytes of each box. These are the
+   **MAC keys**.
 
 Encrypting the sender's long-term public key in step #3 allows Alice to stay
 anonymous to Mallory. If Alice wants to be anonymous to Bob as well, she can

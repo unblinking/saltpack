@@ -216,7 +216,7 @@ A payload packet is a MessagePack list with these contents:
   header. See below.
 - The **payload secretbox** is a NaCl secretbox containing a chunk of the
   plaintext bytes, max size 1 MB. It's encrypted with the **payload key**. The
-  nonce is `saltpack_ploadsbNNNNNNNN` where `NNNNNNNN` is the packet numer as
+  nonce is `saltpack_ploadsbNNNNNNNN` where `NNNNNNNN` is the packet number as
   an 8-byte big-endian unsigned integer. The first payload packet is number 0.
 
 Computing the **MAC keys** is the only step of encrypting a message that

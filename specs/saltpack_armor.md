@@ -65,8 +65,8 @@ Here's an example using our familiar 10-character alphabet, where the letter
 1. Compute C, the length of the output character block. The largest possible
    2-byte value is 65535, so we'll need five decimal digits to represent two
    bytes.
-2. Convert the bytes into number. The bytes 0x00ff, interpreted as a big-endian
-   unsigned integer, equal 255.
+2. Convert the bytes into a number. The bytes 0x00ff, interpreted as a
+   big-endian unsigned integer, equal 255.
 3. Convert the number into digits. The five digit representation of 255, from
    most to least significant, is 0-0-2-5-5.
 4. Map the digits to letters. In this simple alphabet, the result is `00255`.
@@ -90,9 +90,9 @@ Any block of bytes is legal for encoding, but some blocks of characters are
 illegal for decoding. Two errors can come up:
 
 - The number encoded by the C characters might be too big to fit into B bytes.
-  For example in the 10-character alphabet above, the string `70000` is
-  illegal, because although 5 characters in that alphabet correspond to 2
-  bytes, the number 70000 doesn't fit into 2 bytes.
+  For example in the 10-character alphabet above, the block `70000` is illegal.
+  A 5 character block in that alphabet decodes to 2 bytes, and 2-byte integers
+  only go up to 65535 (0xffff).
 - C might not be minimal for the corresponding B. For example, a 4-character
   block of digits is too small to encode 2 bytes, and 1 byte only requires 3
   characters, so 4-character blocks are illegal in a 10-character alphabet.

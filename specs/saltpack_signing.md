@@ -53,7 +53,7 @@ As in the [encryption spec](saltpack_encryption.md), the header packet is
 serialized into a MessagePack `array` object, hashed with SHA512 to produce the
 **header hash**, and then serialized *again* into a MessagePack `bin` object.
 
-Payload packets are MessagePack arrays that looks like this:
+Payload packets are MessagePack arrays that look like this:
 
 ```
 [

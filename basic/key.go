@@ -150,6 +150,17 @@ func (k *Keyring) GenerateBoxKey() (*SecretKey, error) {
 	return ret, nil
 }
 
+// CreateEmphemeralKey creates a random ephemeral key. It is not added to the
+// keyring. The BoxPublicKey and Keyring interfaces both support this method,
+// for convenience.
+func (k *Keyring) CreateEphemeralKey() (saltpack.BoxSecretKey, error) {
+	ret, err := generateBoxKey()
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
 // GenerateSigningKey generates a signing key and import it into the keyring.
 func (k *Keyring) GenerateSigningKey() (*SigningSecretKey, error) {
 	pub, sec, err := ed25519.GenerateKey(rand.Reader)

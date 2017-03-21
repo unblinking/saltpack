@@ -86,6 +86,18 @@ func (r *keyring) GetAllBoxSecretKeys() (ret []BoxSecretKey) {
 	return ret
 }
 
+func (k *keyring) CreateEphemeralKey() (BoxSecretKey, error) {
+	pk, sk, err := box.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	ret := &boxSecretKey{}
+	copy(ret.key[:], (*sk)[:])
+	copy(ret.pub.key[:], (*pk)[:])
+	ret.isInit = true
+	return ret, nil
+}
+
 func (r *keyring) makeIterable() *keyring {
 	return &keyring{
 		keys:     r.keys,

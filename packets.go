@@ -18,9 +18,12 @@ type Version struct {
 	Minor   int  `codec:"minor"`
 }
 
-// EncryptionHeader is the first packet in an encrypted message.
-// It contains the encryptions of the session keys, and various
-// message metadata.
+// EncryptionHeader is the first packet in an encrypted message. It contains
+// the encryptions of the session key, and various message metadata. This same
+// struct is used for the signcryption mode as well, though the key types
+// represented by the []byte arrays are different. (For example in the
+// signcryption mode, the sender secretbox contains a *signing* key instead of
+// an encryption key, and the receiver identifier takes a different form.)
 type EncryptionHeader struct {
 	_struct         bool           `codec:",toarray"`
 	FormatName      string         `codec:"format_name"`
@@ -39,6 +42,17 @@ type encryptionBlock struct {
 	HashAuthenticators [][]byte `codec:"authenticators"`
 	PayloadCiphertext  []byte   `codec:"ctext"`
 	seqno              packetSeqno
+}
+
+// The SigncryptionHeader has exactly the same structure as the
+// EncryptionHeader, though the byte slices represent different types of keys.
+type SigncryptionHeader EncryptionHeader
+
+// signcryptionBlock contains a block of signed and encrypted data.
+type signcryptionBlock struct {
+	_struct           bool   `codec:",toarray"`
+	PayloadCiphertext []byte `codec:"ctext"`
+	seqno             packetSeqno
 }
 
 func (h *EncryptionHeader) validate() error {

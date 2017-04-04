@@ -171,7 +171,7 @@ func (sss *signcryptSealStream) init(receiverBoxKeys []BoxPublicKey, receiverSym
 
 	eh := &SigncryptionHeader{
 		FormatName: SaltpackFormatName,
-		Version:    SaltpackCurrentVersion,
+		Version:    SaltpackVersion2,
 		Type:       MessageTypeSigncryption,
 		Ephemeral:  ephemeralKey.GetPublicKey().ToKID(),
 	}

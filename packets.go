@@ -44,6 +44,16 @@ type encryptionBlock struct {
 	seqno              packetSeqno
 }
 
+func (h *EncryptionHeader) validate() error {
+	if h.Type != MessageTypeEncryption {
+		return ErrWrongMessageType{MessageTypeEncryption, h.Type}
+	}
+	if h.Version.Major != SaltpackCurrentVersion.Major {
+		return ErrBadVersion{h.Version}
+	}
+	return nil
+}
+
 // The SigncryptionHeader has exactly the same structure as the
 // EncryptionHeader, though the byte slices represent different types of keys.
 type SigncryptionHeader EncryptionHeader
@@ -55,11 +65,11 @@ type signcryptionBlock struct {
 	seqno             packetSeqno
 }
 
-func (h *EncryptionHeader) validate() error {
-	if h.Type != MessageTypeEncryption {
-		return ErrWrongMessageType{MessageTypeEncryption, h.Type}
+func (h *SigncryptionHeader) validate() error {
+	if h.Type != MessageTypeSigncryption {
+		return ErrWrongMessageType{MessageTypeSigncryption, h.Type}
 	}
-	if h.Version.Major != SaltpackCurrentVersion.Major {
+	if h.Version.Major != SaltpackVersion2.Major {
 		return ErrBadVersion{h.Version}
 	}
 	return nil

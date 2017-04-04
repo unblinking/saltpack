@@ -214,10 +214,9 @@ func (sos *signcryptOpenStream) trySharedSymmetricKeys(hdr *SigncryptionHeader, 
 }
 
 func (sos *signcryptOpenStream) processSigncryptionHeader(hdr *SigncryptionHeader) error {
-	// TODO: check the message type and version
-	// if err := hdr.validate(); err != nil {
-	// 	return err
-	// }
+	if err := hdr.validate(); err != nil {
+		return err
+	}
 
 	ephemeralPub := sos.keyring.ImportBoxEphemeralKey(hdr.Ephemeral)
 

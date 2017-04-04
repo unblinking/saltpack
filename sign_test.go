@@ -12,29 +12,27 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/agl/ed25519"
+	"golang.org/x/crypto/ed25519"
 )
 
 type sigPubKey struct {
-	key [ed25519.PublicKeySize]byte
+	key []byte
 }
 
-func newSigPubKey(key [ed25519.PublicKeySize]byte) *sigPubKey {
+func newSigPubKey(key []byte) *sigPubKey {
 	return &sigPubKey{key: key}
 }
 
 func (s *sigPubKey) ToKID() []byte {
-	return s.key[:]
+	return s.key
 }
 
 func (s *sigPubKey) Verify(message []byte, signature []byte) error {
 	if len(signature) != ed25519.SignatureSize {
 		return fmt.Errorf("signature size: %d, expected %d", len(signature), ed25519.SignatureSize)
 	}
-	var fixed [ed25519.SignatureSize]byte
-	copy(fixed[:], signature)
 
-	if !ed25519.Verify(&s.key, message, &fixed) {
+	if !ed25519.Verify(s.key, message, signature) {
 		return ErrBadSignature
 	}
 	return nil
@@ -42,7 +40,7 @@ func (s *sigPubKey) Verify(message []byte, signature []byte) error {
 
 type sigPrivKey struct {
 	public  *sigPubKey
-	private [ed25519.PrivateKeySize]byte
+	private []byte
 }
 
 func newSigPrivKey(t *testing.T) *sigPrivKey {
@@ -51,15 +49,15 @@ func newSigPrivKey(t *testing.T) *sigPrivKey {
 		t.Fatal(err)
 	}
 	k := &sigPrivKey{
-		public:  newSigPubKey(*pub),
-		private: *priv,
+		public:  newSigPubKey(pub),
+		private: priv,
 	}
 	kr.insertSigningKey(k)
 	return k
 }
 
 func (s *sigPrivKey) Sign(message []byte) ([]byte, error) {
-	sig := ed25519.Sign(&s.private, message)
+	sig := ed25519.Sign(s.private, message)
 	return sig[:], nil
 }
 

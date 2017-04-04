@@ -9,8 +9,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/agl/ed25519"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/ed25519"
 )
 
 type testConstResolver struct {
@@ -56,8 +56,8 @@ func makeSigningKey(t *testing.T, keyring *keyring) *sigPrivKey {
 		t.Fatal(err)
 	}
 	k := &sigPrivKey{
-		public:  newSigPubKey(*pub),
-		private: *priv,
+		public:  newSigPubKey(pub),
+		private: priv,
 	}
 	keyring.insertSigningKey(k)
 	return k

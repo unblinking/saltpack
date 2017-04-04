@@ -6,8 +6,8 @@ package basic
 import (
 	"crypto/rand"
 
-	"github.com/agl/ed25519"
 	"github.com/keybase/saltpack"
+	"golang.org/x/crypto/ed25519"
 	"golang.org/x/crypto/nacl/box"
 )
 
@@ -167,7 +167,20 @@ func (k *Keyring) GenerateSigningKey() (*SigningSecretKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	ret := NewSigningSecretKey(pub, sec)
+
+	if len(pub) != ed25519.PublicKeySize {
+		panic("unexpected public key size")
+	}
+	var pubArray [ed25519.PublicKeySize]byte
+	copy(pubArray[:], pub)
+
+	if len(sec) != ed25519.PrivateKeySize {
+		panic("unexpected private key size")
+	}
+	var privArray [ed25519.PrivateKeySize]byte
+	copy(privArray[:], sec)
+
+	ret := NewSigningSecretKey(&pubArray, &privArray)
 	return &ret, nil
 }
 
@@ -235,8 +248,7 @@ type SigningSecretKey struct {
 // Sign runs the NaCl signature scheme on the input message, returning
 // a signature.
 func (k SigningSecretKey) Sign(msg []byte) (ret []byte, err error) {
-	tmp := ed25519.Sign((*[ed25519.PrivateKeySize]byte)(&k.sec), msg)
-	return (*tmp)[:], nil
+	return ed25519.Sign(k.sec[:], msg), nil
 }
 
 var _ saltpack.SigningSecretKey = SigningSecretKey{}
@@ -256,9 +268,7 @@ func (k SigningSecretKey) GetPublicKey() saltpack.SigningPublicKey {
 // Verify runs the NaCl verification routine on the given msg / sig
 // input.
 func (k SigningPublicKey) Verify(msg []byte, sig []byte) error {
-	var tmp [ed25519.SignatureSize]byte
-	copy(tmp[:], sig)
-	ok := ed25519.Verify((*[ed25519.PublicKeySize]byte)(&k), msg, &tmp)
+	ok := ed25519.Verify(k[:], msg, sig)
 	if !ok {
 		return saltpack.ErrBadSignature
 	}

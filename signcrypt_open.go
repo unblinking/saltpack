@@ -10,8 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/agl/ed25519"
-
+	"golang.org/x/crypto/ed25519"
 	"golang.org/x/crypto/nacl/secretbox"
 )
 

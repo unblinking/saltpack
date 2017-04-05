@@ -107,23 +107,25 @@ func derivedEphemeralKeyFromBoxKeys(public BoxPublicKey, private BoxSecretKey) *
 	return derivedKey
 }
 
-func receiverEntryForBoxKey(receiverBoxKey BoxPublicKey, ephemeralPriv BoxSecretKey, payloadKey SymmetricKey, index uint64) receiverKeys {
-	derivedKey := derivedEphemeralKeyFromBoxKeys(receiverBoxKey, ephemeralPriv)
-
-	// Compute the identifier that the receiver will use to find this entry.
-	// Include the recipient index, so that this identifier is unique even if
-	// two recipients claim the same public key (though unfortunately that
-	// means that recipients will need to recompute the identifier for each
-	// entry in the recipients list). This identifier is somewhat redundant,
-	// because a recipient could instead just attempt to decrypt the payload
-	// key secretbox and see if it works, but including them adds a bit to
-	// anonymity by making box key recipients indistinguishable from symmetric
-	// key recipients.
+// Compute the visible identifier that the recipient will use to find the right
+// recipient entry. Include the entry index, so that this identifier is unique
+// even if two recipients claim the same public key (though unfortunately that
+// means that recipients will need to recompute the identifier for each entry
+// in the recipients list). This identifier is somewhat redundant, because a
+// recipient could instead just attempt to decrypt the payload key secretbox
+// and see if it works, but including them adds a bit to anonymity by making
+// box key recipients indistinguishable from symmetric key recipients.
+func keyIdentifierFromDerivedKey(derivedKey *SymmetricKey, recipientIndex uint64) []byte {
 	keyIdentifierDigest := sha512.New()
 	keyIdentifierDigest.Write([]byte("saltpack signcryption derived key identifier\x00"))
 	keyIdentifierDigest.Write(derivedKey[:])
-	keyIdentifierDigest.Write(nonceForPayloadKeyBoxV2(index)[:])
-	identifier := keyIdentifierDigest.Sum(nil)[0:32]
+	keyIdentifierDigest.Write(nonceForPayloadKeyBoxV2(recipientIndex)[:])
+	return keyIdentifierDigest.Sum(nil)[0:32]
+}
+
+func receiverEntryForBoxKey(receiverBoxKey BoxPublicKey, ephemeralPriv BoxSecretKey, payloadKey SymmetricKey, index uint64) receiverKeys {
+	derivedKey := derivedEphemeralKeyFromBoxKeys(receiverBoxKey, ephemeralPriv)
+	identifier := keyIdentifierFromDerivedKey(derivedKey, index)
 
 	payloadKeyBox := secretbox.Seal(
 		nil,

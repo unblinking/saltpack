@@ -139,11 +139,7 @@ func (sos *signcryptOpenStream) tryBoxSecretKeys(hdr *SigncryptionHeader, epheme
 	// one, so this shouldn't be as quadratic as it looks.
 	for receiverIndex, receiver := range hdr.Receivers {
 		for _, derivedKey := range derivedKeys {
-			keyIdentifierDigest := sha512.New()
-			keyIdentifierDigest.Write([]byte("saltpack signcryption derived key identifier\x00"))
-			keyIdentifierDigest.Write(derivedKey[:])
-			keyIdentifierDigest.Write(nonceForPayloadKeyBoxV2(uint64(receiverIndex))[:])
-			identifier := keyIdentifierDigest.Sum(nil)[0:32]
+			identifier := keyIdentifierFromDerivedKey(derivedKey, uint64(receiverIndex))
 			if hmac.Equal(identifier, receiver.ReceiverKID) {
 				// This is the right key! Open the sender secretbox and return the sender key.
 				payloadKey, isValid := secretbox.Open(

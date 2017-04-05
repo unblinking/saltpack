@@ -8,6 +8,7 @@ import (
 	"crypto/sha512"
 	"io"
 
+	"golang.org/x/crypto/ed25519"
 	"golang.org/x/crypto/nacl/secretbox"
 )
 
@@ -73,9 +74,17 @@ func (sss *signcryptSealStream) signcryptBytes(b []byte) error {
 	signatureInput = append(signatureInput, nonce[:]...)
 	signatureInput = append(signatureInput, plaintextHash[:]...)
 
-	detachedSig, err := sss.signingKey.Sign(signatureInput)
-	if err != nil {
-		return err
+	// Handle regular signing mode and anonymous mode (where we don't actually
+	// sign anything).
+	var detachedSig []byte
+	if sss.signingKey == nil {
+		detachedSig = make([]byte, ed25519.SignatureSize)
+	} else {
+		var err error
+		detachedSig, err = sss.signingKey.Sign(signatureInput)
+		if err != nil {
+			return err
+		}
 	}
 
 	attachedSig := append(detachedSig, b...)
@@ -194,15 +203,23 @@ func (sss *signcryptSealStream) init(receiverBoxKeys []BoxPublicKey, receiverSym
 		return err
 	}
 
-	// TODO: anonymous senders?
+	// Prepare the secretbox that contains the sender's public key. If the
+	// sender is anonymous, use an all-zeros key, so that the anonymity bit
+	// doesn't leak out.
 	if sss.signingKey == nil {
-		panic("TODO: anonymous senders")
+		// anonymous sender mode, all zeros
+		eh.SenderSecretbox = secretbox.Seal([]byte{}, make([]byte, ed25519.PublicKeySize), (*[24]byte)(nonceForSenderKeySecretBox()), (*[32]byte)(&sss.encryptionKey))
+	} else {
+		// regular sender mode, an actual key
+		signingPublicKeyBytes := sss.signingKey.GetPublicKey().ToKID()
+		if len(signingPublicKeyBytes) != ed25519.PublicKeySize {
+			panic("unexpected signing key length, anonymity bit will leak")
+		}
+		eh.SenderSecretbox = secretbox.Seal([]byte{}, sss.signingKey.GetPublicKey().ToKID(), (*[24]byte)(nonceForSenderKeySecretBox()), (*[32]byte)(&sss.encryptionKey))
 	}
 
 	// Collect all the recipient identifiers, and encrypt the payload key for
 	// all of them.
-	eh.SenderSecretbox = secretbox.Seal([]byte{}, sss.signingKey.GetPublicKey().ToKID(), (*[24]byte)(nonceForSenderKeySecretBox()), (*[32]byte)(&sss.encryptionKey))
-
 	var recipientIndex uint64
 	for _, receiverBoxKey := range receiverBoxKeys {
 		eh.Receivers = append(eh.Receivers, receiverEntryForBoxKey(receiverBoxKey, ephemeralKey, sss.encryptionKey, recipientIndex))

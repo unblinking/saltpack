@@ -110,6 +110,22 @@ func TestSigncryptionResolvedKeyHelloWorld(t *testing.T) {
 	require.Equal(t, opened, msg)
 }
 
+func TestSigncryptionAnonymousSenderHelloWorld(t *testing.T) {
+	msg := []byte("hello world")
+	keyring, receiverBoxKeys := makeKeyringWithOneKey(t)
+
+	sealed, err := SigncryptSeal(msg, keyring, nil /* senderSigningPrivKey */, receiverBoxKeys, nil)
+	require.NoError(t, err)
+
+	senderPub, opened, err := SigncryptOpen(sealed, keyring, nil)
+	require.NoError(t, err)
+
+	// A nil sender means anonymous mode.
+	require.Equal(t, senderPub, nil)
+
+	require.Equal(t, opened, msg)
+}
+
 func TestSigncryptionEmptyCiphertext(t *testing.T) {
 	keyring, _ := makeKeyringWithOneKey(t)
 

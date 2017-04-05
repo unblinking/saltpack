@@ -226,14 +226,19 @@ func (sos *signcryptOpenStream) processSigncryptionHeader(hdr *SigncryptionHeade
 		return ErrNoDecryptionKey
 	}
 
-	// Decrypt the sender's public key
+	// Decrypt the sender's public key, and check for anonymous mode.
 	senderKeySlice, ok := secretbox.Open([]byte{}, hdr.SenderSecretbox, (*[24]byte)(nonceForSenderKeySecretBox()), (*[32]byte)(sos.payloadKey))
 	if !ok {
 		return ErrBadSenderKeySecretbox
 	}
-	sos.signingPublicKey = sos.keyring.LookupSigningPublicKey(senderKeySlice)
-
-	// TODO: anonymous mode
+	zeroSlice := make([]byte, len(senderKeySlice))
+	if bytes.Equal(zeroSlice, senderKeySlice) {
+		// anonymous mode, an all zero sender signing public key
+		sos.signingPublicKey = nil
+	} else {
+		// regular mode, with a real signing public key
+		sos.signingPublicKey = sos.keyring.LookupSigningPublicKey(senderKeySlice)
+	}
 
 	return nil
 }
@@ -264,9 +269,13 @@ func (sos *signcryptOpenStream) processSigncryptionBlock(bl *signcryptionBlock) 
 	signatureInput = append(signatureInput, nonce[:]...)
 	signatureInput = append(signatureInput, plaintextHash[:]...)
 
-	sigErr := sos.signingPublicKey.Verify(signatureInput, detachedSig[:])
-	if sigErr != nil {
-		return nil, ErrBadSignature
+	// Handle anonymous sender mode by skipping signature verification. By
+	// convention the signature bytes are all zeroes, but here we ignore them.
+	if sos.signingPublicKey != nil {
+		sigErr := sos.signingPublicKey.Verify(signatureInput, detachedSig[:])
+		if sigErr != nil {
+			return nil, ErrBadSignature
+		}
 	}
 
 	// The encoding of the empty buffer implies the EOF.  But otherwise, all mechanisms are the same.

@@ -173,6 +173,10 @@ func receiverEntryForSymmetricKey(receiverSymmetricKey ReceiverSymmetricKey, eph
 	}
 }
 
+// This generates the payload key, and encrypts it for all the different
+// recipients of the two different types. Symmetric key recipients and DH key
+// recipients use different types of identifiers, but they are the same length,
+// and should both be indistinguishable from random noise.
 func (sss *signcryptSealStream) init(receiverBoxKeys []BoxPublicKey, receiverSymmetricKeys []ReceiverSymmetricKey) error {
 	ephemeralKey, err := sss.keyring.CreateEphemeralKey()
 	if err != nil {
@@ -194,6 +198,9 @@ func (sss *signcryptSealStream) init(receiverBoxKeys []BoxPublicKey, receiverSym
 	if sss.signingKey == nil {
 		panic("TODO: anonymous senders")
 	}
+
+	// Collect all the recipient identifiers, and encrypt the payload key for
+	// all of them.
 	eh.SenderSecretbox = secretbox.Seal([]byte{}, sss.signingKey.GetPublicKey().ToKID(), (*[24]byte)(nonceForSenderKeySecretBox()), (*[32]byte)(&sss.encryptionKey))
 
 	var recipientIndex uint64

@@ -130,11 +130,7 @@ func (sos *signcryptOpenStream) readBlock(b []byte) (n int, lastBlock bool, err 
 func (sos *signcryptOpenStream) tryBoxSecretKeys(hdr *SigncryptionHeader, ephemeralPub BoxPublicKey) (*SymmetricKey, error) {
 	derivedKeys := []*SymmetricKey{}
 	for _, receiverBoxSecretKey := range sos.keyring.GetAllBoxSecretKeys() {
-		sharedSecretBox := receiverBoxSecretKey.Box(ephemeralPub, nonceForDerivedSharedKey(), make([]byte, 32))
-		derivedKey, err := symmetricKeyFromSlice(sharedSecretBox[len(sharedSecretBox)-32 : len(sharedSecretBox)])
-		if err != nil {
-			panic(err) // should be statically impossible, if the slice above is the right length
-		}
+		derivedKey := derivedEphemeralKeyFromBoxKeys(ephemeralPub, receiverBoxSecretKey)
 		derivedKeys = append(derivedKeys, derivedKey)
 	}
 

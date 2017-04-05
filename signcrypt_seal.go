@@ -92,15 +92,23 @@ func (sss *signcryptSealStream) signcryptBytes(b []byte) error {
 	return nil
 }
 
-func receiverEntryForBoxKey(receiverBoxKey BoxPublicKey, ephemeralPriv BoxSecretKey, payloadKey SymmetricKey, index uint64) receiverKeys {
-	// Derive a shared secret by encrypting zeroes, as in the encryption
-	// format. Multiple recipients could potentially claim the same public key
-	// and share this secret.
-	sharedSecretBox := ephemeralPriv.Box(receiverBoxKey, nonceForDerivedSharedKey(), make([]byte, 32))
-	derivedKey, err := rawBoxKeyFromSlice(sharedSecretBox[len(sharedSecretBox)-32 : len(sharedSecretBox)])
+// Similar to the encryption format, we derive a symmetric key from our DH keys
+// (one of which is ephemeral) by encrypting 32 bytes of zeros. We could have
+// used crypto_box_beforenm directly instead, but that would be a slight abuse
+// of that function, and also we don't expect all NaCl/libsodium wrapper libs
+// to expose it. This key does *not* mix in the recipient index -- it will be
+// the same for two different recipients if they claim the same public key.
+func derivedEphemeralKeyFromBoxKeys(public BoxPublicKey, private BoxSecretKey) *SymmetricKey {
+	sharedSecretBox := private.Box(public, nonceForDerivedSharedKey(), make([]byte, 32))
+	derivedKey, err := symmetricKeyFromSlice(sharedSecretBox[len(sharedSecretBox)-32 : len(sharedSecretBox)])
 	if err != nil {
 		panic(err) // should be statically impossible, if the slice above is the right length
 	}
+	return derivedKey
+}
+
+func receiverEntryForBoxKey(receiverBoxKey BoxPublicKey, ephemeralPriv BoxSecretKey, payloadKey SymmetricKey, index uint64) receiverKeys {
+	derivedKey := derivedEphemeralKeyFromBoxKeys(receiverBoxKey, ephemeralPriv)
 
 	// Compute the identifier that the receiver will use to find this entry.
 	// Include the recipient index, so that this identifier is unique even if

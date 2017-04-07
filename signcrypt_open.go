@@ -20,6 +20,7 @@ type signcryptOpenStream struct {
 	state            readState
 	payloadKey       *SymmetricKey
 	signingPublicKey SigningPublicKey
+	senderAnonymous  bool
 	buf              []byte
 	headerHash       []byte
 	keyring          SigncryptKeyring
@@ -234,7 +235,7 @@ func (sos *signcryptOpenStream) processSigncryptionHeader(hdr *SigncryptionHeade
 	zeroSlice := make([]byte, len(senderKeySlice))
 	if bytes.Equal(zeroSlice, senderKeySlice) {
 		// anonymous mode, an all zero sender signing public key
-		sos.signingPublicKey = nil
+		sos.senderAnonymous = true
 	} else {
 		// regular mode, with a real signing public key
 		sos.signingPublicKey = sos.keyring.LookupSigningPublicKey(senderKeySlice)
@@ -271,7 +272,7 @@ func (sos *signcryptOpenStream) processSigncryptionBlock(bl *signcryptionBlock) 
 
 	// Handle anonymous sender mode by skipping signature verification. By
 	// convention the signature bytes are all zeroes, but here we ignore them.
-	if sos.signingPublicKey != nil {
+	if !sos.senderAnonymous {
 		sigErr := sos.signingPublicKey.Verify(signatureInput, detachedSig[:])
 		if sigErr != nil {
 			return nil, ErrBadSignature

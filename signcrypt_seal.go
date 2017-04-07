@@ -13,15 +13,16 @@ import (
 )
 
 type signcryptSealStream struct {
-	output        io.Writer
-	encoder       encoder
-	header        *SigncryptionHeader
-	encryptionKey SymmetricKey
-	signingKey    SigningSecretKey
-	keyring       Keyring
-	buffer        bytes.Buffer
-	inblock       []byte
-	headerHash    []byte
+	output          io.Writer
+	encoder         encoder
+	header          *SigncryptionHeader
+	encryptionKey   SymmetricKey
+	signingKey      SigningSecretKey
+	senderAnonymous bool
+	keyring         Keyring
+	buffer          bytes.Buffer
+	inblock         []byte
+	headerHash      []byte
 
 	numBlocks encryptionBlockNumber // the lower 64 bits of the nonce
 

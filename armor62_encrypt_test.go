@@ -7,8 +7,8 @@ import (
 	"bytes"
 	"crypto/rand"
 	"io/ioutil"
-	"testing"
 	"strings"
+	"testing"
 
 	"github.com/keybase/saltpack/encoding/basex"
 )

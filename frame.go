@@ -4,8 +4,8 @@
 package saltpack
 
 import (
-	"strings"
 	"regexp"
+	"strings"
 )
 
 type headerOrFooterMarker string

@@ -28,9 +28,16 @@ const MessageTypeDetachedSignature MessageType = 2
 // signcrypted message.
 const MessageTypeSigncryption MessageType = 3
 
-var SaltpackVersion1 = Version{Major: 1, Minor: 0}
-var SaltpackVersion2 = Version{Major: 2, Minor: 0}
-var SaltpackCurrentVersion = SaltpackVersion1
+func Version1() Version {
+	return Version{Major: 1, Minor: 0}
+}
+func Version2() Version {
+	return Version{Major: 2, Minor: 0}
+}
+
+func CurrentVersion() Version {
+	return Version1()
+}
 
 // encryptionBlockSize is by default 1MB and can't currently be tweaked.
 const encryptionBlockSize int = 1048576
@@ -44,9 +51,9 @@ const SignedArmorString = "SIGNED MESSAGE"
 // DetachedSignatureArmorString is included in armor headers for detached signatures.
 const DetachedSignatureArmorString = "DETACHED SIGNATURE"
 
-// SaltpackFormatName is the publicly advertised name of the format,
-// used in the header of the message and also in Nonce creation.
-const SaltpackFormatName = "saltpack"
+// FormatName is the publicly advertised name of the format, used in
+// the header of the message and also in Nonce creation.
+const FormatName = "saltpack"
 
 // signatureBlockSize is by default 1MB and can't currently be tweaked.
 const signatureBlockSize int = 1048576

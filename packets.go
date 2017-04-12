@@ -18,6 +18,8 @@ type Version struct {
 	Minor   int  `codec:"minor"`
 }
 
+// TODO: Check FormatName in the various Header.validate() functions.
+
 // EncryptionHeader is the first packet in an encrypted message. It contains
 // the encryptions of the session key, and various message metadata. This same
 // struct is used for the signcryption mode as well, though the key types
@@ -48,7 +50,7 @@ func (h *EncryptionHeader) validate() error {
 	if h.Type != MessageTypeEncryption {
 		return ErrWrongMessageType{MessageTypeEncryption, h.Type}
 	}
-	if h.Version.Major != SaltpackCurrentVersion.Major {
+	if h.Version.Major != CurrentVersion().Major {
 		return ErrBadVersion{h.Version}
 	}
 	return nil
@@ -69,7 +71,7 @@ func (h *SigncryptionHeader) validate() error {
 	if h.Type != MessageTypeSigncryption {
 		return ErrWrongMessageType{MessageTypeSigncryption, h.Type}
 	}
-	if h.Version.Major != SaltpackVersion2.Major {
+	if h.Version.Major != Version2().Major {
 		return ErrBadVersion{h.Version}
 	}
 	return nil
@@ -95,8 +97,8 @@ func newSignatureHeader(sender SigningPublicKey, msgType MessageType) (*Signatur
 	}
 
 	header := &SignatureHeader{
-		FormatName:   SaltpackFormatName,
-		Version:      SaltpackCurrentVersion,
+		FormatName:   FormatName,
+		Version:      CurrentVersion(),
 		Type:         msgType,
 		SenderPublic: sender.ToKID(),
 		Nonce:        nonce[:],
@@ -112,7 +114,7 @@ func (h *SignatureHeader) validate(msgType MessageType) error {
 			received: h.Type,
 		}
 	}
-	if h.Version.Major != SaltpackCurrentVersion.Major {
+	if h.Version.Major != CurrentVersion().Major {
 		return ErrBadVersion{h.Version}
 	}
 

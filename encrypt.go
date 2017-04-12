@@ -137,8 +137,8 @@ func (es *encryptStream) init(sender BoxSecretKey, receivers []BoxPublicKey) err
 	}
 
 	eh := &EncryptionHeader{
-		FormatName: SaltpackFormatName,
-		Version:    SaltpackCurrentVersion,
+		FormatName: FormatName,
+		Version:    CurrentVersion(),
 		Type:       MessageTypeEncryption,
 		Ephemeral:  ephemeralKey.GetPublicKey().ToKID(),
 		Receivers:  make([]receiverKeys, 0, len(receivers)),

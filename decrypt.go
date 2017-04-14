@@ -21,8 +21,8 @@ type decryptStream struct {
 	payloadKey *SymmetricKey
 	senderKey  *RawBoxKey
 	buf        []byte
-	headerHash []byte
-	macKey     []byte
+	headerHash headerHash
+	macKey     macKey
 	position   int
 	mki        MessageKeyInfo
 }
@@ -100,8 +100,7 @@ func (ds *decryptStream) readHeader(rawReader io.Reader) error {
 		return ErrFailedToReadHeaderBytes
 	}
 	// Compute the header hash.
-	headerHash := sha512.Sum512(headerBytes)
-	ds.headerHash = headerHash[:]
+	ds.headerHash = sha512.Sum512(headerBytes)
 	// Parse the header bytes.
 	var header EncryptionHeader
 	err = decodeFromBytes(&header, headerBytes)
@@ -280,8 +279,8 @@ func (ds *decryptStream) processEncryptionBlock(bl *encryptionBlock) ([]byte, er
 
 	// Check the authenticator.
 	hashToAuthenticate := computePayloadHash(ds.headerHash, nonce, ciphertext)
-	ourAuthenticator := hmacSHA512256(ds.macKey, hashToAuthenticate)
-	if !hmac.Equal(ourAuthenticator, bl.HashAuthenticators[ds.position]) {
+	ourAuthenticator := computePayloadAuthenticator(ds.macKey, hashToAuthenticate)
+	if !ourAuthenticator.Equal(bl.HashAuthenticators[ds.position]) {
 		return nil, ErrBadTag(bl.seqno)
 	}
 

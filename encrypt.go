@@ -19,8 +19,8 @@ type encryptStream struct {
 	payloadKey SymmetricKey
 	buffer     bytes.Buffer
 	inblock    []byte
-	headerHash []byte
-	macKeys    [][]byte
+	headerHash headerHash
+	macKeys    []macKey
 
 	numBlocks encryptionBlockNumber // the lower 64 bits of the nonce
 
@@ -75,7 +75,7 @@ func (es *encryptStream) encryptBytes(b []byte) error {
 	// recipient.
 	hashToAuthenticate := computePayloadHash(es.headerHash, nonce, ciphertext)
 	for _, macKey := range es.macKeys {
-		authenticator := hmacSHA512256(macKey, hashToAuthenticate)
+		authenticator := computePayloadAuthenticator(macKey, hashToAuthenticate)
 		block.HashAuthenticators = append(block.HashAuthenticators, authenticator)
 	}
 
@@ -168,8 +168,7 @@ func (es *encryptStream) init(sender BoxSecretKey, receivers []BoxPublicKey) err
 	if err != nil {
 		return err
 	}
-	headerHash := sha512.Sum512(headerBytes)
-	es.headerHash = headerHash[:]
+	es.headerHash = sha512.Sum512(headerBytes)
 	err = es.encoder.Encode(headerBytes)
 	if err != nil {
 		return err

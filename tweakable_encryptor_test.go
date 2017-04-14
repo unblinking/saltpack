@@ -41,8 +41,8 @@ type testEncryptStream struct {
 	buffer     bytes.Buffer
 	inblock    []byte
 	options    testEncryptionOptions
-	headerHash []byte
-	macKeys    [][]byte
+	headerHash headerHash
+	macKeys    []macKey
 
 	numBlocks encryptionBlockNumber // the lower 64 bits of the nonce
 
@@ -106,7 +106,7 @@ func (pes *testEncryptStream) encryptBytes(b []byte) error {
 	// recipient.
 	hashToAuthenticate := computePayloadHash(pes.headerHash, nonce, ciphertext)
 	for _, macKey := range pes.macKeys {
-		authenticator := hmacSHA512256(macKey, hashToAuthenticate)
+		authenticator := computePayloadAuthenticator(macKey, hashToAuthenticate)
 		block.HashAuthenticators = append(block.HashAuthenticators, authenticator)
 	}
 
@@ -147,8 +147,7 @@ func (pes *testEncryptStream) init(sender BoxSecretKey, receivers []BoxPublicKey
 		return err
 	}
 
-	var senderPlaintext [32]byte
-	copy(senderPlaintext[:], sender.GetPublicKey().ToKID())
+	senderPlaintext := sliceToByte32(sender.GetPublicKey().ToKID())
 	senderPlaintextSlice := senderPlaintext[:]
 	if pes.options.corruptSenderKeyPlaintext != nil {
 		pes.options.corruptSenderKeyPlaintext(&senderPlaintextSlice)
@@ -203,8 +202,7 @@ func (pes *testEncryptStream) init(sender BoxSecretKey, receivers []BoxPublicKey
 	if pes.options.corruptHeaderPacked != nil {
 		pes.options.corruptHeaderPacked(headerBytes)
 	}
-	headerHash := sha512.Sum512(headerBytes)
-	pes.headerHash = headerHash[:]
+	pes.headerHash = sha512.Sum512(headerBytes)
 	err = pes.encoder.Encode(headerBytes)
 	if err != nil {
 		return err

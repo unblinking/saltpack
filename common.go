@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"crypto/sha512"
 	"encoding/binary"
+	"fmt"
 
 	"github.com/keybase/go-codec/codec"
 	"golang.org/x/crypto/poly1305"
@@ -52,9 +53,11 @@ func assertEndOfStream(stream *msgpackStream) error {
 	return err
 }
 
-func attachedSignatureInput(headerHash []byte, block *signatureBlock) []byte {
+type headerHash [sha512.Size]byte
+
+func attachedSignatureInput(headerHash headerHash, block *signatureBlock) []byte {
 	hasher := sha512.New()
-	hasher.Write(headerHash)
+	hasher.Write(headerHash[:])
 	binary.Write(hasher, binary.BigEndian, block.seqno)
 	hasher.Write(block.PayloadChunk)
 
@@ -65,9 +68,9 @@ func attachedSignatureInput(headerHash []byte, block *signatureBlock) []byte {
 	return buf.Bytes()
 }
 
-func detachedSignatureInput(headerHash []byte, plaintext []byte) []byte {
+func detachedSignatureInput(headerHash headerHash, plaintext []byte) []byte {
 	hasher := sha512.New()
-	hasher.Write(headerHash)
+	hasher.Write(headerHash[:])
 	hasher.Write(plaintext)
 
 	return detachedSignatureInputFromHash(hasher.Sum(nil))
@@ -81,35 +84,78 @@ func detachedSignatureInputFromHash(plaintextAndHeaderHash []byte) []byte {
 	return buf.Bytes()
 }
 
-func hmacSHA512256(key []byte, input []byte) []byte {
-	// Equivalent to crypto_auth, but using Go's builtin HMAC. Truncates
-	// SHA512, instead of actually calling SHA512/256.
-	if len(key) != cryptoAuthKeyBytes {
-		panic("Bad crypto_auth key length")
+func copyEqualSize(out, in []byte) {
+	if len(out) != len(in) {
+		panic(fmt.Sprintf("len(out)=%d != len(in)=%d", len(out), len(in)))
 	}
-	authenticatorDigest := hmac.New(sha512.New, key)
-	authenticatorDigest.Write(input)
-	fullMAC := authenticatorDigest.Sum(nil)
-	return fullMAC[:cryptoAuthBytes]
+	copy(out, in)
 }
 
-func computeMACKey(secret BoxSecretKey, public BoxPublicKey, headerHash []byte) []byte {
+func copyEqualSizeStr(out []byte, in string) {
+	if len(out) != len(in) {
+		panic(fmt.Sprintf("len(out)=%d != len(in)=%d", len(out), len(in)))
+	}
+	copy(out, in)
+}
+
+func sliceToByte24(in []byte) [24]byte {
+	var out [24]byte
+	copyEqualSize(out[:], in)
+	return out
+}
+
+func stringToByte24(in string) [24]byte {
+	var out [24]byte
+	copyEqualSizeStr(out[:], in)
+	return out
+}
+
+func sliceToByte32(in []byte) [32]byte {
+	var out [32]byte
+	copyEqualSize(out[:], in)
+	return out
+}
+
+func sliceToByte64(in []byte) [64]byte {
+	var out [64]byte
+	copyEqualSize(out[:], in)
+	return out
+}
+
+type macKey [cryptoAuthKeyBytes]byte
+
+type payloadHash [sha512.Size]byte
+
+type payloadAuthenticator [cryptoAuthBytes]byte
+
+func (pa payloadAuthenticator) Equal(other payloadAuthenticator) bool {
+	return hmac.Equal(pa[:], other[:])
+}
+
+func computePayloadAuthenticator(macKey macKey, payloadHash payloadHash) payloadAuthenticator {
+	// Equivalent to crypto_auth, but using Go's builtin HMAC. Truncates
+	// SHA512, instead of calling SHA512/256, which has different IVs.
+	authenticatorDigest := hmac.New(sha512.New, macKey[:])
+	authenticatorDigest.Write(payloadHash[:])
+	fullMAC := authenticatorDigest.Sum(nil)
+	return sliceToByte32(fullMAC[:cryptoAuthBytes])
+}
+
+func computeMACKey(secret BoxSecretKey, public BoxPublicKey, headerHash headerHash) macKey {
 	nonce := nonceForMACKeyBox(headerHash)
 	macKeyBox := secret.Box(public, nonce, make([]byte, cryptoAuthKeyBytes))
-	macKey := macKeyBox[poly1305.TagSize : poly1305.TagSize+cryptoAuthKeyBytes]
-	return macKey
+	return sliceToByte32(macKeyBox[poly1305.TagSize : poly1305.TagSize+cryptoAuthKeyBytes])
 }
 
-func computePayloadHash(headerHash []byte, nonce *Nonce, payloadCiphertext []byte) []byte {
+func computePayloadHash(headerHash headerHash, nonce *Nonce, payloadCiphertext []byte) payloadHash {
 	payloadDigest := sha512.New()
-	payloadDigest.Write(headerHash)
+	payloadDigest.Write(headerHash[:])
 	payloadDigest.Write(nonce[:])
 	payloadDigest.Write(payloadCiphertext)
-	return payloadDigest.Sum(nil)
+	h := payloadDigest.Sum(nil)
+	return sliceToByte64(h)
 }
 
-func sha512OfSlice(slice []byte) []byte {
-	digest := sha512.New()
-	digest.Write(slice)
-	return digest.Sum(nil)
+func hashHeader(headerBytes []byte) headerHash {
+	return sha512.Sum512(headerBytes)
 }

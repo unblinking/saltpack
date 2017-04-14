@@ -55,8 +55,7 @@ func (r *keyring) LookupBoxPublicKey(kid []byte) BoxPublicKey {
 	if _, found := r.blacklist[hex.EncodeToString(kid)]; found {
 		return nil
 	}
-	ret := boxPublicKey{}
-	copy(ret.key[:], kid)
+	ret := boxPublicKey{key: sliceToByte32(kid)}
 	return &ret
 }
 
@@ -73,7 +72,7 @@ func (r *keyring) ImportBoxEphemeralKey(kid []byte) BoxPublicKey {
 	if len(kid) != len(ret.key) {
 		return nil
 	}
-	copy(ret.key[:], kid)
+	ret.key = sliceToByte32(kid)
 	return ret
 }
 
@@ -92,8 +91,8 @@ func (k *keyring) CreateEphemeralKey() (BoxSecretKey, error) {
 		return nil, err
 	}
 	ret := &boxSecretKey{}
-	copy(ret.key[:], (*sk)[:])
-	copy(ret.pub.key[:], (*pk)[:])
+	ret.key = *sk
+	ret.pub.key = *pk
 	ret.isInit = true
 	return ret, nil
 }
@@ -180,8 +179,8 @@ func (b boxPublicKey) CreateEphemeralKey() (BoxSecretKey, error) {
 		return nil, err
 	}
 	ret := &boxSecretKey{hide: b.hide}
-	copy(ret.key[:], (*sk)[:])
-	copy(ret.pub.key[:], (*pk)[:])
+	ret.key = *sk
+	ret.pub.key = *pk
 	ret.isInit = true
 	return ret, nil
 }

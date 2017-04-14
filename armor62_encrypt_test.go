@@ -13,7 +13,7 @@ import (
 	"github.com/keybase/saltpack/encoding/basex"
 )
 
-func encryptArmor62RandomData(t *testing.T, sz int) ([]byte, string) {
+func encryptArmor62RandomData(t *testing.T, version Version, sz int) ([]byte, string) {
 	msg := randomMsg(t, sz)
 	if _, err := rand.Read(msg); err != nil {
 		t.Fatal(err)
@@ -21,16 +21,16 @@ func encryptArmor62RandomData(t *testing.T, sz int) ([]byte, string) {
 	sndr := newBoxKey(t)
 	receivers := []BoxPublicKey{newBoxKey(t).GetPublicKey()}
 
-	ciphertext, err := EncryptArmor62Seal(msg, sndr, receivers, ourBrand)
+	ciphertext, err := EncryptArmor62Seal(version, msg, sndr, receivers, ourBrand)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return msg, ciphertext
 }
 
-func TestEncryptArmor62(t *testing.T) {
-	plaintext, ciphertext := encryptArmor62RandomData(t, 1024)
-	_, plaintext2, brand, err := Dearmor62DecryptOpen(ciphertext, kr)
+func testEncryptArmor62(t *testing.T, version Version) {
+	plaintext, ciphertext := encryptArmor62RandomData(t, version, 1024)
+	_, plaintext2, brand, err := Dearmor62DecryptOpen(SingleVersionValidator(version), ciphertext, kr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestEncryptArmor62(t *testing.T) {
 	brandCheck(t, brand)
 }
 
-func TestDearmor62DecryptSlowReader(t *testing.T) {
+func testDearmor62DecryptSlowReader(t *testing.T, version Version) {
 	sz := 1024*16 + 3
 	msg := randomMsg(t, sz)
 	if _, err := rand.Read(msg); err != nil {
@@ -49,12 +49,12 @@ func TestDearmor62DecryptSlowReader(t *testing.T) {
 	sndr := newBoxKey(t)
 	receivers := []BoxPublicKey{newBoxKey(t).GetPublicKey()}
 
-	ciphertext, err := EncryptArmor62Seal(msg, sndr, receivers, ourBrand)
+	ciphertext, err := EncryptArmor62Seal(version, msg, sndr, receivers, ourBrand)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, dec, frame, err := NewDearmor62DecryptStream(&slowReader{[]byte(ciphertext)}, kr)
+	_, dec, frame, err := NewDearmor62DecryptStream(SingleVersionValidator(version), &slowReader{[]byte(ciphertext)}, kr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,14 +74,14 @@ func TestDearmor62DecryptSlowReader(t *testing.T) {
 	}
 }
 
-func TestNewlineInFrame(t *testing.T) {
-	plaintext, ciphertext := encryptArmor62RandomData(t, 1024)
+func testNewlineInFrame(t *testing.T, version Version) {
+	plaintext, ciphertext := encryptArmor62RandomData(t, version, 1024)
 
 	//newline space space tab space
 	ss := []string{"\n\n>   ", ciphertext[0:10], "\n  	 ", ciphertext[11:]}
 	ciphertext = strings.Join(ss, "")
 
-	_, plaintext2, brand, err := Dearmor62DecryptOpen(ciphertext, kr)
+	_, plaintext2, brand, err := Dearmor62DecryptOpen(SingleVersionValidator(version), ciphertext, kr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,10 +91,10 @@ func TestNewlineInFrame(t *testing.T) {
 	brandCheck(t, brand)
 }
 
-func TestBadArmor62(t *testing.T) {
-	_, ciphertext := encryptArmor62RandomData(t, 24)
+func testBadArmor62(t *testing.T, version Version) {
+	_, ciphertext := encryptArmor62RandomData(t, version, 24)
 	bad1 := ciphertext[0:2] + "䁕" + ciphertext[2:]
-	_, _, _, err := Dearmor62DecryptOpen(bad1, kr)
+	_, _, _, err := Dearmor62DecryptOpen(SingleVersionValidator(version), bad1, kr)
 	if _, ok := err.(ErrBadFrame); !ok {
 		t.Fatalf("Wanted error type %T but got type %T", ErrBadFrame{}, err)
 	}
@@ -104,20 +104,20 @@ func TestBadArmor62(t *testing.T) {
 	}
 
 	bad2 := ciphertext[0:1] + "z" + ciphertext[2:]
-	_, _, _, err = Dearmor62DecryptOpen(bad2, kr)
+	_, _, _, err = Dearmor62DecryptOpen(SingleVersionValidator(version), bad2, kr)
 	if _, ok := err.(ErrBadFrame); !ok {
 		t.Fatalf("Wanted of type ErrBadFrame; got %v", err)
 	}
 
 	l := len(ciphertext)
 	bad3 := ciphertext[0:(l-8)] + "z" + ciphertext[(l-7):]
-	_, _, _, err = Dearmor62DecryptOpen(bad3, kr)
+	_, _, _, err = Dearmor62DecryptOpen(SingleVersionValidator(version), bad3, kr)
 	if _, ok := err.(ErrBadFrame); !ok {
 		t.Fatalf("Wanted of type ErrBadFrmae; got %v", err)
 	}
 
 	bad4 := ciphertext + "䁕"
-	_, _, _, err = Dearmor62DecryptOpen(bad4, kr)
+	_, _, _, err = Dearmor62DecryptOpen(SingleVersionValidator(version), bad4, kr)
 	if err != ErrTrailingGarbage {
 		t.Fatalf("Wanted error %v but got %v", ErrTrailingGarbage, err)
 	}
@@ -133,4 +133,14 @@ func TestBadArmor62(t *testing.T) {
 	if _, ok := err.(basex.CorruptInputError); !ok {
 		t.Fatalf("Wanted error of type CorruptInputError but got %v", err)
 	}
+}
+
+func TestArmor62Encrypt(t *testing.T) {
+	tests := []func(*testing.T, Version){
+		testEncryptArmor62,
+		testDearmor62DecryptSlowReader,
+		testNewlineInFrame,
+		testBadArmor62,
+	}
+	runTestsOverVersions(t, "test", tests)
 }

@@ -14,17 +14,18 @@ import (
 )
 
 type decryptStream struct {
-	ring       Keyring
-	mps        *msgpackStream
-	err        error
-	state      readState
-	payloadKey *SymmetricKey
-	senderKey  *RawBoxKey
-	buf        []byte
-	headerHash headerHash
-	macKey     macKey
-	position   int
-	mki        MessageKeyInfo
+	versionValidator VersionValidator
+	ring             Keyring
+	mps              *msgpackStream
+	err              error
+	state            readState
+	payloadKey       *SymmetricKey
+	senderKey        *RawBoxKey
+	buf              []byte
+	headerHash       headerHash
+	macKey           macKey
+	position         int
+	mki              MessageKeyInfo
 }
 
 // MessageKeyInfo conveys all of the data about the keys used in this encrypted message.
@@ -207,7 +208,7 @@ func (ds *decryptStream) tryHiddenReceivers(hdr *EncryptionHeader, ephemeralKey 
 }
 
 func (ds *decryptStream) processEncryptionHeader(hdr *EncryptionHeader) error {
-	if err := hdr.validate(); err != nil {
+	if err := hdr.validate(ds.versionValidator); err != nil {
 		return err
 	}
 
@@ -296,6 +297,34 @@ func (ds *decryptStream) processEncryptionBlock(bl *encryptionBlock) ([]byte, er
 	return plaintext, nil
 }
 
+// VersionValidator is a function that takes a version and returns nil
+// if it's a valid version, and an error otherwise.
+type VersionValidator func(version Version) error
+
+// CheckKnownMajorVersion returns nil if the given version has a known
+// major version. You probably want to use this with NewDecryptStream,
+// unless you want to restrict to specific versions only.
+func CheckKnownMajorVersion(version Version) error {
+	for _, knownVersion := range KnownVersions() {
+		if version.Major == knownVersion.Major {
+			return nil
+		}
+	}
+	return ErrBadVersion{version}
+}
+
+// SingleVersionValidator returns a VersionValidator that returns nil
+// if its given version is equal to desiredVersion.
+func SingleVersionValidator(desiredVersion Version) VersionValidator {
+	return func(version Version) error {
+		if version == desiredVersion {
+			return nil
+		}
+
+		return ErrBadVersion{version}
+	}
+}
+
 // NewDecryptStream starts a streaming decryption. It synchronously ingests
 // and parses the given Reader's encryption header. It consults the passed
 // keyring for the decryption keys needed to decrypt the message. On failure,
@@ -307,10 +336,11 @@ func (ds *decryptStream) processEncryptionBlock(bl *encryptionBlock) ([]byte, er
 // Note that the caller has an opportunity not to ingest the plaintext if he
 // doesn't trust the sender revealed in the MessageKeyInfo.
 //
-func NewDecryptStream(r io.Reader, keyring Keyring) (mki *MessageKeyInfo, plaintext io.Reader, err error) {
+func NewDecryptStream(versionValidator VersionValidator, r io.Reader, keyring Keyring) (mki *MessageKeyInfo, plaintext io.Reader, err error) {
 	ds := &decryptStream{
-		ring: keyring,
-		mps:  newMsgpackStream(r),
+		versionValidator: versionValidator,
+		ring:             keyring,
+		mps:              newMsgpackStream(r),
 	}
 
 	err = ds.readHeader(r)
@@ -324,9 +354,9 @@ func NewDecryptStream(r io.Reader, keyring Keyring) (mki *MessageKeyInfo, plaint
 // Open simply opens a ciphertext given the set of keys in the specified keyring.
 // It returns a plaintext on success, and an error on failure. It returns the header's
 // MessageKeyInfo in either case.
-func Open(ciphertext []byte, keyring Keyring) (i *MessageKeyInfo, plaintext []byte, err error) {
+func Open(versionValidator VersionValidator, ciphertext []byte, keyring Keyring) (i *MessageKeyInfo, plaintext []byte, err error) {
 	buf := bytes.NewBuffer(ciphertext)
-	mki, plaintextStream, err := NewDecryptStream(buf, keyring)
+	mki, plaintextStream, err := NewDecryptStream(versionValidator, buf, keyring)
 	if err != nil {
 		return mki, nil, err
 	}

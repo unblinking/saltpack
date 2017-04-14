@@ -38,14 +38,14 @@ func ExampleEncryptArmor62Seal() {
 	// but for now, just the one.
 	var ciphertext string
 	allReceivers := []saltpack.BoxPublicKey{receiver.GetPublicKey()}
-	ciphertext, err = saltpack.EncryptArmor62Seal(msg, sender, allReceivers, "")
+	ciphertext, err = saltpack.EncryptArmor62Seal(saltpack.CurrentVersion(), msg, sender, allReceivers, "")
 	if err != nil {
 		return
 	}
 
 	// The decrypted message should match the input mesasge.
 	var msg2 []byte
-	_, msg2, _, err = saltpack.Dearmor62DecryptOpen(ciphertext, keyring)
+	_, msg2, _, err = saltpack.Dearmor62DecryptOpen(saltpack.CheckKnownMajorVersion, ciphertext, keyring)
 	if err != nil {
 		return
 	}
@@ -85,7 +85,7 @@ func ExampleNewEncryptArmor62Stream() {
 	var output bytes.Buffer
 	allReceivers := []saltpack.BoxPublicKey{receiver.GetPublicKey()}
 	var input io.WriteCloser
-	input, err = saltpack.NewEncryptArmor62Stream(&output, sender, allReceivers, "")
+	input, err = saltpack.NewEncryptArmor62Stream(saltpack.CurrentVersion(), &output, sender, allReceivers, "")
 	if err != nil {
 		return
 	}
@@ -96,7 +96,7 @@ func ExampleNewEncryptArmor62Stream() {
 
 	// The decrypted message
 	var plaintextOutput io.Reader
-	_, plaintextOutput, _, err = saltpack.NewDearmor62DecryptStream(&output, keyring)
+	_, plaintextOutput, _, err = saltpack.NewDearmor62DecryptStream(saltpack.CheckKnownMajorVersion, &output, keyring)
 	if err != nil {
 		return
 	}

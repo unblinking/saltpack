@@ -16,7 +16,7 @@ func randomMsg(t *testing.T, sz int) []byte {
 	return out
 }
 
-func TestBasicBox(t *testing.T) {
+func testBasicBox(t *testing.T, version saltpack.Version) {
 	kr := NewKeyring()
 	k1, err := kr.GenerateBoxKey()
 	if err != nil {
@@ -27,16 +27,25 @@ func TestBasicBox(t *testing.T) {
 		t.Fatal(err)
 	}
 	msg := randomMsg(t, 1024)
-	text, err := saltpack.EncryptArmor62Seal(msg, k1, []saltpack.BoxPublicKey{k2.GetPublicKey()}, "")
+	text, err := saltpack.EncryptArmor62Seal(version, msg, k1, []saltpack.BoxPublicKey{k2.GetPublicKey()}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, msg2, _, err := saltpack.Dearmor62DecryptOpen(text, kr)
+	_, msg2, _, err := saltpack.Dearmor62DecryptOpen(saltpack.SingleVersionValidator(version), text, kr)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(msg, msg2) {
 		t.Fatal("failed to recover message")
+	}
+}
+
+func TestBasicBox(t *testing.T) {
+	for _, version := range saltpack.KnownVersions() {
+		version := version // capture range variable.
+		t.Run(version.String(), func(t *testing.T) {
+			testBasicBox(t, version)
+		})
 	}
 }
 

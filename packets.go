@@ -18,6 +18,10 @@ type Version struct {
 	Minor   int  `codec:"minor"`
 }
 
+func (v Version) String() string {
+	return fmt.Sprintf("%d.%d", v.Major, v.Minor)
+}
+
 // TODO: Check FormatName in the various Header.validate() functions.
 
 // EncryptionHeader is the first packet in an encrypted message. It contains
@@ -46,14 +50,11 @@ type encryptionBlock struct {
 	seqno              packetSeqno
 }
 
-func (h *EncryptionHeader) validate() error {
+func (h *EncryptionHeader) validate(versionValidator func(Version) error) error {
 	if h.Type != MessageTypeEncryption {
 		return ErrWrongMessageType{MessageTypeEncryption, h.Type}
 	}
-	if h.Version.Major != CurrentVersion().Major {
-		return ErrBadVersion{h.Version}
-	}
-	return nil
+	return versionValidator(h.Version)
 }
 
 // The SigncryptionHeader has exactly the same structure as the

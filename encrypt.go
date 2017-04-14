@@ -119,7 +119,19 @@ func (es *encryptStream) checkReceivers(v []BoxPublicKey) error {
 	return nil
 }
 
-func (es *encryptStream) init(sender BoxSecretKey, receivers []BoxPublicKey) error {
+func checkKnownVersion(version Version) error {
+	for _, knownVersion := range KnownVersions() {
+		if version == knownVersion {
+			return nil
+		}
+	}
+	return ErrBadVersion{version}
+}
+
+func (es *encryptStream) init(version Version, sender BoxSecretKey, receivers []BoxPublicKey) error {
+	if err := checkKnownVersion(version); err != nil {
+		return err
+	}
 
 	if err := es.checkReceivers(receivers); err != nil {
 		return err
@@ -138,7 +150,7 @@ func (es *encryptStream) init(sender BoxSecretKey, receivers []BoxPublicKey) err
 
 	eh := &EncryptionHeader{
 		FormatName: FormatName,
-		Version:    CurrentVersion(),
+		Version:    version,
 		Type:       MessageTypeEncryption,
 		Ephemeral:  ephemeralKey.GetPublicKey().ToKID(),
 		Receivers:  make([]receiverKeys, 0, len(receivers)),
@@ -208,21 +220,21 @@ func (es *encryptStream) writeFooter() error {
 //
 // Returns an io.WriteClose that accepts plaintext data to be encrypted; and
 // also returns an error if initialization failed.
-func NewEncryptStream(ciphertext io.Writer, sender BoxSecretKey, receivers []BoxPublicKey) (io.WriteCloser, error) {
+func NewEncryptStream(version Version, ciphertext io.Writer, sender BoxSecretKey, receivers []BoxPublicKey) (io.WriteCloser, error) {
 	es := &encryptStream{
 		output:  ciphertext,
 		encoder: newEncoder(ciphertext),
 		inblock: make([]byte, encryptionBlockSize),
 	}
-	err := es.init(sender, receivers)
+	err := es.init(version, sender, receivers)
 	return es, err
 }
 
 // Seal a plaintext from the given sender, for the specified receiver groups.
 // Returns a ciphertext, or an error if something bad happened.
-func Seal(plaintext []byte, sender BoxSecretKey, receivers []BoxPublicKey) (out []byte, err error) {
+func Seal(version Version, plaintext []byte, sender BoxSecretKey, receivers []BoxPublicKey) (out []byte, err error) {
 	var buf bytes.Buffer
-	es, err := NewEncryptStream(&buf, sender, receivers)
+	es, err := NewEncryptStream(version, &buf, sender, receivers)
 	if err != nil {
 		return nil, err
 	}

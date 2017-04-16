@@ -15,13 +15,25 @@ func nonceForSenderKeySecretBox() Nonce {
 	return stringToByte24("saltpack_sender_key_sbox")
 }
 
-func nonceForPayloadKeyBoxV1() Nonce {
-	return stringToByte24("saltpack_payload_key_box")
+func nonceForPayloadKeyBoxV2(recip uint64) Nonce {
+	var n Nonce
+	off := len(n) - 8
+	copyEqualSizeStr(n[:off], "saltpack_recipsb")
+	binary.BigEndian.PutUint64(n[off:], uint64(recip))
+	return n
 }
 
-func nonceForPayloadKeyBoxV2(recip uint64) Nonce {
-	// TODO: Actually mix in recip.
-	return stringToByte24("saltpack_recipsbXXXXXXXX")
+func nonceForPayloadKeyBox(version Version, recip uint64) Nonce {
+	switch version.Major {
+	case 1:
+		return stringToByte24("saltpack_payload_key_box")
+	case 2:
+		return nonceForPayloadKeyBoxV2(recip)
+	default:
+		// Let caller be responsible for filtering out unknown
+		// versions.
+		panic(ErrBadVersion{version})
+	}
 }
 
 func nonceForDerivedSharedKey() Nonce {

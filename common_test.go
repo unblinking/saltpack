@@ -85,6 +85,13 @@ var secret2 = boxSecretKey{
 	key: RawBoxKey{0x10},
 }
 
+var eSecret1 = boxSecretKey{
+	key: RawBoxKey{0x18},
+}
+var eSecret2 = boxSecretKey{
+	key: RawBoxKey{0x20},
+}
+
 var public1 = boxPublicKey{
 	key: RawBoxKey{0x5},
 }
@@ -94,10 +101,40 @@ var public2 = boxPublicKey{
 
 var constHeaderHash = headerHash{0x7}
 
-func TestComputeMacKey(t *testing.T) {
-	macKey1 := computeMACKey(secret1, public1, constHeaderHash)
-	macKey2 := computeMACKey(secret2, public1, constHeaderHash)
-	macKey3 := computeMACKey(secret1, public2, constHeaderHash)
+func TestComputeMACKeySenderV1(t *testing.T) {
+	macKey1 := computeMACKeySender(Version1(), 0, secret1, eSecret1, public1, constHeaderHash)
+	macKey2 := computeMACKeySender(Version1(), 1, secret1, eSecret1, public1, constHeaderHash)
+	macKey3 := computeMACKeySender(Version1(), 0, secret2, eSecret1, public1, constHeaderHash)
+	macKey4 := computeMACKeySender(Version1(), 0, secret1, eSecret2, public1, constHeaderHash)
+	macKey5 := computeMACKeySender(Version1(), 0, secret1, eSecret1, public2, constHeaderHash)
+
+	// The V1 MAC key doesn't depend on the index; this is fixed
+	// in V2.
+	if macKey2 != macKey1 {
+		t.Errorf("macKey2 == %v != macKey1 == %v unexpectedly", macKey2, macKey1)
+	}
+
+	if macKey3 == macKey1 {
+		t.Errorf("macKey3 == macKey1 == %v unexpectedly", macKey1)
+	}
+
+	// The V1 MAC key doesn't depend on the ephemeral keypair; this is
+	// fixed in V2.
+	if macKey4 != macKey1 {
+		t.Errorf("macKey4 == %v != macKey1 == %v unexpectedly", macKey4, macKey1)
+	}
+
+	if macKey5 == macKey1 {
+		t.Errorf("macKey5 == macKey1 == %v unexpectedly", macKey1)
+	}
+}
+
+func TestComputeMACKeySenderV2(t *testing.T) {
+	macKey1 := computeMACKeySender(Version2(), 0, secret1, eSecret1, public1, constHeaderHash)
+	macKey2 := computeMACKeySender(Version2(), 1, secret1, eSecret1, public1, constHeaderHash)
+	macKey3 := computeMACKeySender(Version2(), 0, secret2, eSecret1, public1, constHeaderHash)
+	macKey4 := computeMACKeySender(Version2(), 0, secret1, eSecret2, public1, constHeaderHash)
+	macKey5 := computeMACKeySender(Version2(), 0, secret1, eSecret1, public2, constHeaderHash)
 
 	if macKey2 == macKey1 {
 		t.Errorf("macKey2 == macKey1 == %v unexpectedly", macKey1)
@@ -106,4 +143,60 @@ func TestComputeMacKey(t *testing.T) {
 	if macKey3 == macKey1 {
 		t.Errorf("macKey3 == macKey1 == %v unexpectedly", macKey1)
 	}
+
+	if macKey4 == macKey1 {
+		t.Errorf("macKey4 == macKey1 == %v unexpectedly", macKey1)
+	}
+
+	if macKey5 == macKey1 {
+		t.Errorf("macKey5 == macKey1 == %v unexpectedly", macKey1)
+	}
+}
+
+func TestComputeMACKeySendersSameRecipientV1(t *testing.T) {
+	receivers := []BoxPublicKey{public1, public1}
+	macKeys := computeMACKeysSender(Version1(), secret1, eSecret1, receivers, constHeaderHash)
+
+	if len(macKeys) != 2 {
+		t.Fatalf("len(macKeys)=%d != 2 unexpectedly", len(macKeys))
+	}
+
+	// Identical recipients lead to identical MAC keys in V1; this
+	// is fixed in V2.
+	if macKeys[0] != macKeys[1] {
+		t.Errorf("macKeys[0] = %v != macKeys[1] = %v unexpectedly", macKeys[0], macKeys[1])
+	}
+}
+
+func TestComputeMACKeySendersSameRecipientV2(t *testing.T) {
+	receivers := []BoxPublicKey{public1, public1}
+	macKeys := computeMACKeysSender(Version2(), secret1, eSecret1, receivers, constHeaderHash)
+
+	if len(macKeys) != 2 {
+		t.Fatalf("len(macKeys)=%d != 2 unexpectedly", len(macKeys))
+	}
+
+	if macKeys[0] == macKeys[1] {
+		t.Errorf("macKeys[0] == macKeys[1] = %v unexpectedly", macKeys[0])
+	}
+}
+
+func testComputeMACKeySenderReceiver(t *testing.T, version Version) {
+	var index uint64 = 3
+	senderKey := newBoxKeyNoInsert(t)
+	eKey := newBoxKeyNoInsert(t)
+	receiverKey := newBoxKeyNoInsert(t)
+
+	senderMACKey := computeMACKeySender(version, index, senderKey, eKey, receiverKey.GetPublicKey(), constHeaderHash)
+	receiverMACKey := computeMACKeyReceiver(version, index, receiverKey, senderKey.GetPublicKey(), eKey.GetPublicKey(), constHeaderHash)
+	if senderMACKey != receiverMACKey {
+		t.Fatalf("senderMACKey = %v != receiverMACKey = %v", senderMACKey, receiverMACKey)
+	}
+}
+
+func TestCommon(t *testing.T) {
+	tests := []func(*testing.T, Version){
+		testComputeMACKeySenderReceiver,
+	}
+	runTestsOverVersions(t, "test", tests)
 }

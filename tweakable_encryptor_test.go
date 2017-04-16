@@ -191,12 +191,15 @@ func (pes *testEncryptStream) init(version Version, sender BoxSecretKey, receive
 		eh.Receivers = append(eh.Receivers, keys)
 	}
 
+	// Corrupt a copy so that the corruption doesn't cause
+	// e.g. computeMACKeys to panic.
+	ehMaybeCorrupt := *eh
 	if pes.options.corruptHeader != nil {
-		pes.options.corruptHeader(eh)
+		pes.options.corruptHeader(&ehMaybeCorrupt)
 	}
 
 	// Encode the header and the header length, and write them out immediately.
-	headerBytes, err := encodeToBytes(pes.header)
+	headerBytes, err := encodeToBytes(ehMaybeCorrupt)
 	if err != nil {
 		return err
 	}
@@ -210,16 +213,9 @@ func (pes *testEncryptStream) init(version Version, sender BoxSecretKey, receive
 	}
 
 	// Use the header hash to compute the MAC keys.
-	pes.computeMACKeys(sender, receivers)
+	pes.macKeys = computeMACKeysSender(pes.header.Version, sender, ephemeralKey, receivers, pes.headerHash)
 
 	return nil
-}
-
-func (pes *testEncryptStream) computeMACKeys(sender BoxSecretKey, receivers []BoxPublicKey) {
-	for _, receiver := range receivers {
-		macKey := computeMACKey(sender, receiver, pes.headerHash)
-		pes.macKeys = append(pes.macKeys, macKey)
-	}
 }
 
 func (pes *testEncryptStream) Close() error {

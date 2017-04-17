@@ -5,6 +5,7 @@ package saltpack
 
 import (
 	"bytes"
+	"crypto/hmac"
 	"crypto/sha512"
 	"io"
 
@@ -126,8 +127,7 @@ func derivedEphemeralKeyFromBoxKeys(public BoxPublicKey, private BoxSecretKey) *
 // and see if it works, but including them adds a bit to anonymity by making
 // box key recipients indistinguishable from symmetric key recipients.
 func keyIdentifierFromDerivedKey(derivedKey *SymmetricKey, recipientIndex uint64) []byte {
-	keyIdentifierDigest := sha512.New()
-	keyIdentifierDigest.Write([]byte("saltpack signcryption derived key identifier\x00"))
+	keyIdentifierDigest := hmac.New(sha512.New, []byte(signcryptionBoxKeyIdentifierContext))
 	keyIdentifierDigest.Write(derivedKey[:])
 	nonce := nonceForPayloadKeyBoxV2(recipientIndex)
 	keyIdentifierDigest.Write(nonce[:])
@@ -162,8 +162,7 @@ func receiverEntryForSymmetricKey(receiverSymmetricKey ReceiverSymmetricKey, eph
 	// Derive a message-specific shared secret by hashing the symmetric key and
 	// the ephemeral public key together. This lets us use nonces that are
 	// simple counters.
-	derivedKeyDigest := sha512.New()
-	derivedKeyDigest.Write([]byte(signcryptionSymmetricKeyContext))
+	derivedKeyDigest := hmac.New(sha512.New, []byte(signcryptionSymmetricKeyContext))
 	derivedKeyDigest.Write(ephemeralPub.ToKID())
 	derivedKeyDigest.Write(receiverSymmetricKey.Key[:])
 	derivedKey, err := rawBoxKeyFromSlice(derivedKeyDigest.Sum(nil)[0:32])

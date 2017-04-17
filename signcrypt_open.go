@@ -182,8 +182,7 @@ func (sos *signcryptOpenStream) trySharedSymmetricKeys(hdr *SigncryptionHeader, 
 		}
 
 		// We got a key. It should decrypt the corresponding receiver secretbox.
-		derivedKeyDigest := sha512.New()
-		derivedKeyDigest.Write([]byte(signcryptionSymmetricKeyContext))
+		derivedKeyDigest := hmac.New(sha512.New, []byte(signcryptionSymmetricKeyContext))
 		derivedKeyDigest.Write(ephemeralPub.ToKID())
 		derivedKeyDigest.Write(resolved[:])
 		derivedKey, err := rawBoxKeyFromSlice(derivedKeyDigest.Sum(nil)[0:32])

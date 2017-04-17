@@ -74,9 +74,13 @@ const signatureDetachedString = "saltpack detached signature\x00"
 // a signcryption signature.
 const signatureEncryptedString = "saltpack encrypted signature\x00"
 
-// signcryptionSymmetricKeyContext gets mixed in with the long term symmetric
-// key and ephemeral key inputs
-const signcryptionSymmetricKeyContext = "saltpack signcryption derived symmetric key\x00"
+// signcryptionDerivedSymmetricKeyContext gets mixed in with the long term symmetric
+// key and ephemeral key inputs, as an HMAC key
+const signcryptionSymmetricKeyContext = "saltpack signcryption derived symmetric key"
+
+// signcryptionBoxKeyIdentifierContext gets mixed in with the DH shared secret
+// as an HMAC key, to make an opaque identifier
+const signcryptionBoxKeyIdentifierContext = "saltpack signcryption box key identifier"
 
 // We truncate HMAC512 to the same link that NaCl's crypto_auth function does.
 const cryptoAuthBytes = 32

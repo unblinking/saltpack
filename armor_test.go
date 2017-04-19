@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func msg(sz int) []byte {
@@ -174,10 +176,7 @@ func TestBinaryInput(t *testing.T) {
 		t.Fatal("timed out waiting for Armor62Open to finish")
 	}
 
-	// PC this seems like a bug to me, but leaving it alone for now:
-	/*
-		if err == nil {
-			t.Errorf("Armor62Open worked on binary data: m == %x, hdr == %q, ftr == %q", m, hdr, ftr)
-		}
-	*/
+	// Armor62Open should try to find the punctuation for the
+	// header and hit EOF.
+	require.Equal(t, io.ErrUnexpectedEOF, err, "Armor62Open didn't return io.ErrUnexpectedEOF: m == %v, hdr == %q, ftr == %q, err == %v", m, hdr, ftr, err)
 }

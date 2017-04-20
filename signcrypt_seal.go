@@ -134,8 +134,18 @@ func keyIdentifierFromDerivedKey(derivedKey *SymmetricKey, recipientIndex uint64
 	return keyIdentifierDigest.Sum(nil)[0:32]
 }
 
-func receiverEntryForBoxKey(receiverBoxKey BoxPublicKey, ephemeralPriv BoxSecretKey, payloadKey SymmetricKey, index uint64) receiverKeys {
-	derivedKey := derivedEphemeralKeyFromBoxKeys(receiverBoxKey, ephemeralPriv)
+// A receiverKeysMaker is either a (wrapped) BoxPublicKey or a
+// ReceiverSymmetricKey.
+type receiverKeysMaker interface {
+	makeReceiverKeys(ephemeralPriv BoxSecretKey, payloadKey SymmetricKey, index uint64) receiverKeys
+}
+
+type receiverBoxKey struct {
+	pk BoxPublicKey
+}
+
+func (r receiverBoxKey) makeReceiverKeys(ephemeralPriv BoxSecretKey, payloadKey SymmetricKey, index uint64) receiverKeys {
+	derivedKey := derivedEphemeralKeyFromBoxKeys(r.pk, ephemeralPriv)
 	identifier := keyIdentifierFromDerivedKey(derivedKey, index)
 
 	nonce := nonceForPayloadKeyBoxV2(index)
@@ -158,13 +168,13 @@ type ReceiverSymmetricKey struct {
 	Identifier []byte
 }
 
-func receiverEntryForSymmetricKey(receiverSymmetricKey ReceiverSymmetricKey, ephemeralPub BoxPublicKey, payloadKey SymmetricKey, index uint64) receiverKeys {
+func (r ReceiverSymmetricKey) makeReceiverKeys(ephemeralPriv BoxSecretKey, payloadKey SymmetricKey, index uint64) receiverKeys {
 	// Derive a message-specific shared secret by hashing the symmetric key and
 	// the ephemeral public key together. This lets us use nonces that are
 	// simple counters.
 	derivedKeyDigest := hmac.New(sha512.New, []byte(signcryptionSymmetricKeyContext))
-	derivedKeyDigest.Write(ephemeralPub.ToKID())
-	derivedKeyDigest.Write(receiverSymmetricKey.Key[:])
+	derivedKeyDigest.Write(ephemeralPriv.GetPublicKey().ToKID())
+	derivedKeyDigest.Write(r.Key[:])
 	derivedKey, err := rawBoxKeyFromSlice(derivedKeyDigest.Sum(nil)[0:32])
 	if err != nil {
 		panic(err) // should be statically impossible, if the slice above is the right length
@@ -180,16 +190,30 @@ func receiverEntryForSymmetricKey(receiverSymmetricKey ReceiverSymmetricKey, eph
 	// Unlike the box key case, the identifier is supplied by the caller rather
 	// than computed. (These will be KBFS TLF pseudonyms.)
 	return receiverKeys{
-		ReceiverKID:   receiverSymmetricKey.Identifier,
+		ReceiverKID:   r.Identifier,
 		PayloadKeyBox: payloadKeyBox,
 	}
+}
+
+func shuffleSigncryptionReceivers(receiverBoxKeys []BoxPublicKey, receiverSymmetricKeys []ReceiverSymmetricKey) []receiverKeysMaker {
+	totalLen := len(receiverBoxKeys) + len(receiverSymmetricKeys)
+	order := randomPerm(totalLen)
+	receivers := make([]receiverKeysMaker, totalLen)
+	for i, r := range receiverBoxKeys {
+		receivers[order[i]] = receiverBoxKey{r}
+	}
+
+	for i, r := range receiverSymmetricKeys {
+		receivers[order[len(receiverBoxKeys)+i]] = r
+	}
+	return receivers
 }
 
 // This generates the payload key, and encrypts it for all the different
 // recipients of the two different types. Symmetric key recipients and DH key
 // recipients use different types of identifiers, but they are the same length,
 // and should both be indistinguishable from random noise.
-func (sss *signcryptSealStream) init(receiverBoxKeys []BoxPublicKey, receiverSymmetricKeys []ReceiverSymmetricKey) error {
+func (sss *signcryptSealStream) init(receivers []receiverKeysMaker) error {
 	ephemeralKey, err := sss.keyring.CreateEphemeralKey()
 	if err != nil {
 		return err
@@ -224,14 +248,8 @@ func (sss *signcryptSealStream) init(receiverBoxKeys []BoxPublicKey, receiverSym
 
 	// Collect all the recipient identifiers, and encrypt the payload key for
 	// all of them.
-	var recipientIndex uint64
-	for _, receiverBoxKey := range receiverBoxKeys {
-		eh.Receivers = append(eh.Receivers, receiverEntryForBoxKey(receiverBoxKey, ephemeralKey, sss.encryptionKey, recipientIndex))
-		recipientIndex++
-	}
-	for _, receiverSymmetricKey := range receiverSymmetricKeys {
-		eh.Receivers = append(eh.Receivers, receiverEntryForSymmetricKey(receiverSymmetricKey, ephemeralKey.GetPublicKey(), sss.encryptionKey, recipientIndex))
-		recipientIndex++
+	for i, r := range receivers {
+		eh.Receivers = append(eh.Receivers, r.makeReceiverKeys(ephemeralKey, sss.encryptionKey, uint64(i)))
 	}
 
 	// Encode the header to bytes, hash it, then double encode it.
@@ -278,7 +296,8 @@ func NewSigncryptSealStream(ciphertext io.Writer, keyring Keyring, sender Signin
 		signingKey: sender,
 		keyring:    keyring,
 	}
-	err := sss.init(receiverBoxKeys, receiverSymmetricKeys)
+	receivers := shuffleSigncryptionReceivers(receiverBoxKeys, receiverSymmetricKeys)
+	err := sss.init(receivers)
 	return sss, err
 }
 

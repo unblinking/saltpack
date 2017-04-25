@@ -6,15 +6,16 @@ package saltpack
 import (
 	"bytes"
 	"crypto/sha512"
+	"fmt"
 	"hash"
 	"io"
 )
 
 type signAttachedStream struct {
+	version    Version
 	headerHash headerHash
 	encoder    encoder
 	buffer     bytes.Buffer
-	block      []byte
 	seqno      packetSeqno
 	secretKey  SigningSecretKey
 }
@@ -40,9 +41,9 @@ func newSignAttachedStream(version Version, w io.Writer, signer SigningSecretKey
 
 	// Create the attached stream object.
 	stream := &signAttachedStream{
+		version:    version,
 		headerHash: headerHash,
 		encoder:    newEncoder(w),
-		block:      make([]byte, signatureBlockSize),
 		secretKey:  signer,
 	}
 
@@ -61,8 +62,11 @@ func (s *signAttachedStream) Write(p []byte) (int, error) {
 		return 0, err
 	}
 
-	for s.buffer.Len() >= signatureBlockSize {
-		if err := s.signBlock(); err != nil {
+	// If s.buffer.Len() == signatureBlockSize, we don't want to
+	// write it out just yet, since for V2 we need to be sure this
+	// isn't the last block.
+	for s.buffer.Len() > signatureBlockSize {
+		if err := s.signBlock(false); err != nil {
 			return 0, err
 		}
 	}
@@ -71,34 +75,107 @@ func (s *signAttachedStream) Write(p []byte) (int, error) {
 }
 
 func (s *signAttachedStream) Close() error {
-	for s.buffer.Len() > 0 {
-		if err := s.signBlock(); err != nil {
+	switch s.version {
+	case Version1():
+		if s.buffer.Len() > 0 {
+			if err := s.signBlock(false); err != nil {
+				return err
+			}
+		}
+
+		if s.buffer.Len() > 0 {
+			panic(fmt.Sprintf("s.buffer.Len()=%d > 0", s.buffer.Len()))
+		}
+
+		return s.signBlock(true)
+
+	case Version2():
+		if err := s.signBlock(true); err != nil {
 			return err
 		}
+
+		if s.buffer.Len() > 0 {
+			panic(fmt.Sprintf("s.buffer.Len()=%d > 0", s.buffer.Len()))
+		}
+
+		return nil
+
+	default:
+		panic(ErrBadVersion{s.version})
 	}
-	return s.writeFooter()
 }
 
-func (s *signAttachedStream) signBlock() error {
-	n, err := s.buffer.Read(s.block[:])
+func makeSignatureBlock(version Version, sig, chunk []byte, isFinal bool) interface{} {
+	sbV1 := signatureBlockV1{
+		Signature:    sig,
+		PayloadChunk: chunk,
+	}
+	switch version {
+	case Version1():
+		return sbV1
+	case Version2():
+		return signatureBlockV2{
+			signatureBlockV1: sbV1,
+			IsFinal:          isFinal,
+		}
+	default:
+		panic(ErrBadVersion{version})
+	}
+}
+
+func checkSignBlockRead(version Version, isFinal bool, blockSize, chunkLen, bufLen int) {
+	die := func() {
+		panic(fmt.Errorf("invalid signBlock read state: version=%s, isFinal=%t, chunkLen=%d, bufLen=%d", version, isFinal, chunkLen, bufLen))
+	}
+
+	// We shouldn't read more than a full block's worth.
+	if chunkLen > blockSize {
+		die()
+	}
+
+	// If we read less than a full block's worth, then we
+	// shouldn't have anything left in the buffer.
+	if chunkLen < blockSize && bufLen > 0 {
+		die()
+	}
+
+	switch version {
+	case Version1():
+		// isFinal must be equivalent to chunkLen being 0
+		// (which, by the above, implies that bufLen == 0).
+		if isFinal != (chunkLen == 0) {
+			die()
+		}
+
+	case Version2():
+		// If isFinal, then chunkLen can be any number,
+		// but bufLen must be 0.
+		if isFinal && (bufLen != 0) {
+			die()
+		}
+
+	default:
+		panic(ErrBadVersion{version})
+	}
+}
+
+func (s *signAttachedStream) signBlock(isFinal bool) error {
+	// NOTE: chunk is a slice into s.buffer's buffer, so make sure
+	// not to stash it anywhere.
+	chunk := s.buffer.Next(signatureBlockSize)
+	checkSignBlockRead(s.version, isFinal, signatureBlockSize, len(chunk), s.buffer.Len())
+
+	sig, err := s.computeSig(chunk, s.seqno, isFinal)
 	if err != nil {
 		return err
 	}
-	return s.signBytes(s.block[:n])
-}
 
-func (s *signAttachedStream) signBytes(b []byte) error {
-	block := signatureBlock{
-		PayloadChunk: b,
-		seqno:        s.seqno,
+	if err := checkSignatureState(s.version, chunk, isFinal); err != nil {
+		panic(err)
 	}
-	sig, err := s.computeSig(&block)
-	if err != nil {
-		return err
-	}
-	block.Signature = sig
 
-	if err := s.encoder.Encode(block); err != nil {
+	sBlock := makeSignatureBlock(s.version, sig, chunk, isFinal)
+	if err := s.encoder.Encode(sBlock); err != nil {
 		return err
 	}
 
@@ -106,12 +183,8 @@ func (s *signAttachedStream) signBytes(b []byte) error {
 	return nil
 }
 
-func (s *signAttachedStream) writeFooter() error {
-	return s.signBytes([]byte{})
-}
-
-func (s *signAttachedStream) computeSig(block *signatureBlock) ([]byte, error) {
-	return s.secretKey.Sign(attachedSignatureInput(s.headerHash, block))
+func (s *signAttachedStream) computeSig(payloadChunk []byte, seqno packetSeqno, isFinal bool) ([]byte, error) {
+	return s.secretKey.Sign(attachedSignatureInput(s.version, s.headerHash, payloadChunk, seqno, isFinal))
 }
 
 type signDetachedStream struct {

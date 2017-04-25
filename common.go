@@ -78,11 +78,23 @@ func assertEndOfStream(stream *msgpackStream) error {
 
 type headerHash [sha512.Size]byte
 
-func attachedSignatureInput(headerHash headerHash, block *signatureBlock) []byte {
+func attachedSignatureInput(version Version, headerHash headerHash, payloadChunk []byte, seqno packetSeqno, isFinal bool) []byte {
 	hasher := sha512.New()
 	hasher.Write(headerHash[:])
-	binary.Write(hasher, binary.BigEndian, block.seqno)
-	hasher.Write(block.PayloadChunk)
+	binary.Write(hasher, binary.BigEndian, seqno)
+	switch version.Major {
+	case 1:
+	// Nothing to do.
+	case 2:
+		var isFinalByte byte
+		if isFinal {
+			isFinalByte = 1
+		}
+		hasher.Write([]byte{isFinalByte})
+	default:
+		panic(ErrBadVersion{version})
+	}
+	hasher.Write(payloadChunk)
 
 	var buf bytes.Buffer
 	buf.Write([]byte(signatureAttachedString))
@@ -196,8 +208,6 @@ func checkCiphertextState(version Version, ciphertext []byte, isFinal bool) erro
 			return makeErr()
 		}
 
-		return nil
-
 	case 2:
 		// With V2, it's valid to have a final packet with
 		// non-empty plaintext, so the below is the only
@@ -212,11 +222,11 @@ func checkCiphertextState(version Version, ciphertext []byte, isFinal bool) erro
 			return makeErr()
 		}
 
-		return nil
-
 	default:
 		panic(ErrBadVersion{version})
 	}
+
+	return nil
 }
 
 func computePayloadHash(version Version, headerHash headerHash, nonce Nonce, ciphertext []byte, isFinal bool) payloadHash {
@@ -270,4 +280,40 @@ func SingleVersionValidator(desiredVersion Version) VersionValidator {
 
 		return ErrBadVersion{version}
 	}
+}
+
+// checkSignatureState sanity-checks some signature parameters. When
+// called by the signer, a non-nil error should cause a panic, but
+// when called by the verifier, it should be treated as a regular
+// error.
+func checkSignatureState(version Version, chunk []byte, isFinal bool) error {
+	makeErr := func() error {
+		return fmt.Errorf("invalid signature state: version=%s, len(chunk)=%d, isFinal=%t", version, len(chunk), isFinal)
+	}
+
+	switch version.Major {
+	case 1:
+		if (len(chunk) == 0) != isFinal {
+			return makeErr()
+		}
+
+	case 2:
+		// With V2, it's valid to have a final packet with
+		// non-empty chunk, so the below is the only remaining
+		// invalid state.
+		//
+		// TODO: Ideally, we'd disallow empty packets even
+		// with isFinal set, but we still want to allow
+		// signing an empty message. Plumb through an isFirst
+		// flag and change "!isFinal" to "!isFirst ||
+		// !isFinal".
+		if (len(chunk) == 0) && !isFinal {
+			return makeErr()
+		}
+
+	default:
+		panic(ErrBadVersion{version})
+	}
+
+	return nil
 }

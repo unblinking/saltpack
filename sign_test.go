@@ -362,6 +362,10 @@ func testSignNilKey(t *testing.T, version Version) {
 	}
 }
 
+type errReader struct{}
+
+func (e errReader) Read(p []byte) (int, error) { return 0, errors.New("read error") }
+
 func testSignBadRandReader(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
 	msg := randomMsg(t, 128)
@@ -550,6 +554,212 @@ func testSignDetachedCorruptHeader(t *testing.T, version Version) {
 	}
 }
 
+func TestSignSinglePacketV1(t *testing.T) {
+	message := make([]byte, signatureBlockSize)
+	key := newSigPrivKey(t)
+	smsg, err := Sign(Version1(), message, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mps := newMsgpackStream(bytes.NewReader(smsg))
+
+	var headerBytes []byte
+	_, err = mps.Read(&headerBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var block signatureBlockV1
+
+	// Payload packet.
+	_, err = mps.Read(&block)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Empty footer payload packet.
+	_, err = mps.Read(&block)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Nothing else.
+	_, err = mps.Read(&block)
+	if err != io.EOF {
+		t.Fatalf("err=%v != io.EOF", err)
+	}
+}
+
+func TestSignSinglePacketV2(t *testing.T) {
+	message := make([]byte, signatureBlockSize)
+	key := newSigPrivKey(t)
+	smsg, err := Sign(Version2(), message, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mps := newMsgpackStream(bytes.NewReader(smsg))
+
+	var headerBytes []byte
+	_, err = mps.Read(&headerBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var block signatureBlockV2
+
+	// Payload packet.
+	_, err = mps.Read(&block)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !block.IsFinal {
+		t.Fatal("block.IsFinal unexpectedly not set")
+	}
+
+	// Nothing else.
+	_, err = mps.Read(&block)
+	if err != io.EOF {
+		t.Fatalf("err=%v != io.EOF", err)
+	}
+}
+
+func TestSignSubsequenceV1(t *testing.T) {
+	message := make([]byte, 2*signatureBlockSize)
+	key := newSigPrivKey(t)
+	smsg, err := Sign(Version1(), message, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mps := newMsgpackStream(bytes.NewReader(smsg))
+
+	// These truncated messages will have the first payload
+	// packet, the second payload packet, and neither payload
+	// packet, respectively.
+	truncatedSMsg1 := bytes.NewBuffer(nil)
+	truncatedSMsg2 := bytes.NewBuffer(nil)
+	truncatedSMsg3 := bytes.NewBuffer(nil)
+	encoder1 := newEncoder(truncatedSMsg1)
+	encoder2 := newEncoder(truncatedSMsg2)
+	encoder3 := newEncoder(truncatedSMsg3)
+
+	encode := func(e encoder, i interface{}) {
+		err = e.Encode(i)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var headerBytes []byte
+	_, err = mps.Read(&headerBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	encode(encoder1, headerBytes)
+	encode(encoder2, headerBytes)
+	encode(encoder3, headerBytes)
+
+	var block signatureBlockV1
+
+	// Payload packet 1.
+	_, err = mps.Read(&block)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	encode(encoder1, block)
+
+	// Payload packet 2.
+	_, err = mps.Read(&block)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	encode(encoder2, block)
+
+	// Empty footer payload packet.
+	_, err = mps.Read(&block)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	encode(encoder1, block)
+	encode(encoder2, block)
+	encode(encoder3, block)
+
+	for i, truncatedSMsg := range []*bytes.Buffer{truncatedSMsg1, truncatedSMsg2, truncatedSMsg3} {
+		_, _, err = Verify(SingleVersionValidator(Version1()), truncatedSMsg.Bytes(), kr)
+		if err != ErrBadSignature {
+			t.Errorf("err=%v != ErrBadSignature for truncatedSMsg%d", err, i+1)
+		}
+	}
+}
+
+func TestSignSubsequenceV2(t *testing.T) {
+	message := make([]byte, 2*signatureBlockSize)
+	key := newSigPrivKey(t)
+	smsg, err := Sign(Version2(), message, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mps := newMsgpackStream(bytes.NewReader(smsg))
+
+	// These truncated messages will have the first payload
+	// packet and the second payload packet, respectively.
+	truncatedSMsg1 := bytes.NewBuffer(nil)
+	truncatedSMsg2 := bytes.NewBuffer(nil)
+	encoder1 := newEncoder(truncatedSMsg1)
+	encoder2 := newEncoder(truncatedSMsg2)
+
+	encode := func(e encoder, i interface{}) {
+		err = e.Encode(i)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var headerBytes []byte
+	_, err = mps.Read(&headerBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	encode(encoder1, headerBytes)
+	encode(encoder2, headerBytes)
+
+	var block signatureBlockV2
+
+	// Payload packet 1.
+	_, err = mps.Read(&block)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	block.IsFinal = true
+	encode(encoder1, block)
+
+	// Payload packet 2.
+	_, err = mps.Read(&block)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	block.IsFinal = true
+	encode(encoder2, block)
+
+	for i, truncatedSMsg := range []*bytes.Buffer{truncatedSMsg1, truncatedSMsg2} {
+		_, _, err = Verify(SingleVersionValidator(Version2()), truncatedSMsg.Bytes(), kr)
+		if err != ErrBadSignature {
+			t.Errorf("err=%v != ErrBadSignature for truncatedSMsg%d", err, i+1)
+		}
+	}
+}
+
 func testSignDetachedTruncated(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
 	msg := randomMsg(t, 128)
@@ -567,10 +777,6 @@ func testSignDetachedTruncated(t *testing.T, version Version) {
 		t.Fatal("expected EOF error from truncated sig")
 	}
 }
-
-type errReader struct{}
-
-func (e errReader) Read(p []byte) (int, error) { return 0, errors.New("read error") }
 
 func TestSign(t *testing.T) {
 	tests := []func(*testing.T, Version){

@@ -5,9 +5,26 @@ package saltpack
 
 import (
 	"bytes"
+	"errors"
+	"io"
+	"io/ioutil"
 	"sync"
 	"testing"
 )
+
+func TestVerifyVersionValidator(t *testing.T) {
+	in := []byte{0x01}
+	key := newSigPrivKey(t)
+	smg, err := Sign(Version1(), in, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = Verify(SingleVersionValidator(Version2()), smg, kr)
+	if err == nil {
+		t.Fatal("Unexpected nil error")
+	}
+}
 
 func testVerify(t *testing.T, version Version) {
 	in := randomMsg(t, 128)
@@ -27,21 +44,6 @@ func testVerify(t *testing.T, version Version) {
 	}
 	if !bytes.Equal(msg, in) {
 		t.Errorf("verified msg '%x', expected '%x'", msg, in)
-	}
-}
-
-func TestVerifyVersionValidator(t *testing.T) {
-	in := []byte{0x01}
-	key := newSigPrivKey(t)
-	smg, err := Sign(Version1(), in, key)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, _, err = Verify(SingleVersionValidator(Version2()), smg, kr)
-	expectedErr := ErrBadVersion{Version1()}
-	if err != expectedErr {
-		t.Fatalf("expected %v, got %v", expectedErr, err)
 	}
 }
 
@@ -100,6 +102,10 @@ func testVerifyConcurrent(t *testing.T, version Version) {
 	wg.Wait()
 }
 
+type emptySigKeyring struct{}
+
+func (k emptySigKeyring) LookupSigningPublicKey(kid []byte) SigningPublicKey { return nil }
+
 func testVerifyEmptyKeyring(t *testing.T, version Version) {
 	in := randomMsg(t, 128)
 	key := newSigPrivKey(t)
@@ -134,9 +140,33 @@ func testVerifyDetachedEmptyKeyring(t *testing.T, version Version) {
 	}
 }
 
-type emptySigKeyring struct{}
+func testVerifyErrorAtEOF(t *testing.T, version Version) {
+	in := randomMsg(t, 128)
+	key := newSigPrivKey(t)
+	smsg, err := Sign(version, in, key)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-func (k emptySigKeyring) LookupSigningPublicKey(kid []byte) SigningPublicKey { return nil }
+	var reader io.Reader = bytes.NewReader(smsg)
+	errAtEOF := errors.New("err at EOF")
+	reader = errAtEOFReader{reader, errAtEOF}
+	_, stream, err := NewVerifyStream(SingleVersionValidator(version), reader, kr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	msg, err := ioutil.ReadAll(stream)
+	if err != errAtEOF {
+		t.Fatalf("err=%v != errAtEOF=%v", err, errAtEOF)
+	}
+
+	// Since the bytes are still verified, the verified message
+	// should still compare equal to the original input.
+	if !bytes.Equal(msg, in) {
+		t.Errorf("verified msg '%x', expected '%x'", msg, in)
+	}
+}
 
 func TestVerify(t *testing.T) {
 	tests := []func(*testing.T, Version){
@@ -145,6 +175,7 @@ func TestVerify(t *testing.T) {
 		testVerifyConcurrent,
 		testVerifyEmptyKeyring,
 		testVerifyDetachedEmptyKeyring,
+		testVerifyErrorAtEOF,
 	}
 	runTestsOverVersions(t, "test", tests)
 }

@@ -13,6 +13,7 @@ import (
 	mathrand "math/rand"
 
 	"github.com/keybase/go-codec/codec"
+	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/crypto/poly1305"
 )
 
@@ -176,11 +177,65 @@ func sum512Truncate256(in []byte) [32]byte {
 	return sliceToByte32(sum512[:32])
 }
 
-func computePayloadHash(headerHash headerHash, nonce Nonce, payloadCiphertext []byte) payloadHash {
+// checkCiphertextState sanity-checks some ciphertext parameters. When
+// called by the encryptor, a non-nil error should cause a panic, but
+// when called by the decryptor, it should be treated as a regular
+// error.
+func checkCiphertextState(version Version, ciphertext []byte, isFinal bool) error {
+	makeErr := func() error {
+		return fmt.Errorf("invalid ciphertext state: version=%s, len(ciphertext)=%d, isFinal=%t", version, len(ciphertext), isFinal)
+	}
+
+	if len(ciphertext) < secretbox.Overhead {
+		return makeErr()
+	}
+
+	switch version.Major {
+	case 1:
+		if (len(ciphertext) == secretbox.Overhead) != isFinal {
+			return makeErr()
+		}
+
+		return nil
+
+	case 2:
+		// With V2, it's valid to have a final packet with
+		// non-empty plaintext, so the below is the only
+		// remaining invalid state.
+		//
+		// TODO: Ideally, we'd disallow empty packets even
+		// with isFinal set, but we still want to allow
+		// encrypting an empty message. Plumb through an
+		// isFirst flag and change "!isFinal" to "!isFirst ||
+		// !isFinal".
+		if (len(ciphertext) == secretbox.Overhead) && !isFinal {
+			return makeErr()
+		}
+
+		return nil
+
+	default:
+		panic(ErrBadVersion{version})
+	}
+}
+
+func computePayloadHash(version Version, headerHash headerHash, nonce Nonce, ciphertext []byte, isFinal bool) payloadHash {
 	payloadDigest := sha512.New()
 	payloadDigest.Write(headerHash[:])
 	payloadDigest.Write(nonce[:])
-	payloadDigest.Write(payloadCiphertext)
+	switch version.Major {
+	case 1:
+	// Nothing to do.
+	case 2:
+		var isFinalByte byte
+		if isFinal {
+			isFinalByte = 1
+		}
+		payloadDigest.Write([]byte{isFinalByte})
+	default:
+		panic(ErrBadVersion{version})
+	}
+	payloadDigest.Write(ciphertext)
 	h := payloadDigest.Sum(nil)
 	return sliceToByte64(h)
 }

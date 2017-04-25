@@ -6,6 +6,7 @@ package saltpack
 import (
 	"bytes"
 	"crypto/sha512"
+	"fmt"
 	"io"
 
 	"golang.org/x/crypto/nacl/secretbox"
@@ -14,7 +15,7 @@ import (
 type testEncryptionOptions struct {
 	blockSize                   int
 	skipFooter                  bool
-	corruptEncryptionBlock      func(bl *encryptionBlock, ebn encryptionBlockNumber)
+	corruptEncryptionBlock      func(bl *interface{}, ebn encryptionBlockNumber)
 	corruptCiphertextBeforeHash func(c []byte, ebn encryptionBlockNumber)
 	corruptPayloadNonce         func(n Nonce, ebn encryptionBlockNumber) Nonce
 	corruptKeysNonce            func(n Nonce, rid int) Nonce
@@ -34,12 +35,11 @@ func (eo testEncryptionOptions) getBlockSize() int {
 }
 
 type testEncryptStream struct {
+	version    Version
 	output     io.Writer
 	encoder    encoder
-	header     *EncryptionHeader
 	payloadKey SymmetricKey
 	buffer     bytes.Buffer
-	inblock    []byte
 	options    testEncryptionOptions
 	headerHash headerHash
 	macKeys    []macKey
@@ -61,8 +61,12 @@ func (pes *testEncryptStream) Write(plaintext []byte) (int, error) {
 	if ret, pes.err = pes.buffer.Write(plaintext); pes.err != nil {
 		return 0, pes.err
 	}
-	for pes.buffer.Len() >= pes.options.getBlockSize() {
-		pes.err = pes.encryptBlock()
+
+	// If es.buffer.Len() == encryptionBlockSize, we don't want to
+	// write it out just yet, since for V2 we need to be sure this
+	// isn't the last block.
+	for pes.buffer.Len() > pes.options.getBlockSize() {
+		pes.err = pes.encryptBlock(false)
 		if pes.err != nil {
 			return 0, pes.err
 		}
@@ -70,17 +74,9 @@ func (pes *testEncryptStream) Write(plaintext []byte) (int, error) {
 	return ret, nil
 }
 
-func (pes *testEncryptStream) encryptBlock() error {
-	var n int
-	var err error
-	n, err = pes.buffer.Read(pes.inblock[:])
-	if err != nil {
-		return err
-	}
-	return pes.encryptBytes(pes.inblock[0:n])
-}
-
-func (pes *testEncryptStream) encryptBytes(b []byte) error {
+func (pes *testEncryptStream) encryptBlock(isFinal bool) error {
+	plaintext := pes.buffer.Next(pes.options.getBlockSize())
+	checkEncryptBlockRead(pes.version, isFinal, pes.options.getBlockSize(), len(plaintext), pes.buffer.Len())
 
 	if err := pes.numBlocks.check(); err != nil {
 		return err
@@ -92,29 +88,33 @@ func (pes *testEncryptStream) encryptBytes(b []byte) error {
 		nonce = pes.options.corruptPayloadNonce(nonce, pes.numBlocks)
 	}
 
-	ciphertext := secretbox.Seal([]byte{}, b, (*[24]byte)(&nonce), (*[32]byte)(&pes.payloadKey))
+	ciphertext := secretbox.Seal([]byte{}, plaintext, (*[24]byte)(&nonce), (*[32]byte)(&pes.payloadKey))
+
+	if err := checkCiphertextState(pes.version, ciphertext, isFinal); err != nil {
+		// We should always create valid ciphertext states.
+		panic(err)
+	}
 
 	if pes.options.corruptCiphertextBeforeHash != nil {
 		pes.options.corruptCiphertextBeforeHash(ciphertext, pes.numBlocks)
 	}
 
-	block := encryptionBlock{
-		PayloadCiphertext: ciphertext,
-	}
-
 	// Compute the digest to authenticate, and authenticate it for each
 	// recipient.
-	hashToAuthenticate := computePayloadHash(pes.headerHash, nonce, ciphertext)
+	hashToAuthenticate := computePayloadHash(pes.version, pes.headerHash, nonce, ciphertext, isFinal)
+	var authenticators []payloadAuthenticator
 	for _, macKey := range pes.macKeys {
 		authenticator := computePayloadAuthenticator(macKey, hashToAuthenticate)
-		block.HashAuthenticators = append(block.HashAuthenticators, authenticator)
+		authenticators = append(authenticators, authenticator)
 	}
+
+	eBlock := makeEncryptionBlock(pes.version, ciphertext, authenticators, isFinal)
 
 	if pes.options.corruptEncryptionBlock != nil {
-		pes.options.corruptEncryptionBlock(&block, pes.numBlocks)
+		pes.options.corruptEncryptionBlock(&eBlock, pes.numBlocks)
 	}
 
-	if err := pes.encoder.Encode(block); err != nil {
+	if err := pes.encoder.Encode(eBlock); err != nil {
 		return err
 	}
 
@@ -135,14 +135,13 @@ func (pes *testEncryptStream) init(version Version, sender BoxSecretKey, receive
 		sender = ephemeralKey
 	}
 
-	eh := &EncryptionHeader{
+	eh := EncryptionHeader{
 		FormatName: FormatName,
 		Version:    version,
 		Type:       MessageTypeEncryption,
 		Ephemeral:  ephemeralKey.GetPublicKey().ToKID(),
 		Receivers:  make([]receiverKeys, 0, len(receivers)),
 	}
-	pes.header = eh
 	if err := randomFill(pes.payloadKey[:]); err != nil {
 		return err
 	}
@@ -191,15 +190,12 @@ func (pes *testEncryptStream) init(version Version, sender BoxSecretKey, receive
 		eh.Receivers = append(eh.Receivers, keys)
 	}
 
-	// Corrupt a copy so that the corruption doesn't cause
-	// e.g. computeMACKeys to panic.
-	ehMaybeCorrupt := *eh
 	if pes.options.corruptHeader != nil {
-		pes.options.corruptHeader(&ehMaybeCorrupt)
+		pes.options.corruptHeader(&eh)
 	}
 
 	// Encode the header and the header length, and write them out immediately.
-	headerBytes, err := encodeToBytes(ehMaybeCorrupt)
+	headerBytes, err := encodeToBytes(eh)
 	if err != nil {
 		return err
 	}
@@ -213,37 +209,65 @@ func (pes *testEncryptStream) init(version Version, sender BoxSecretKey, receive
 	}
 
 	// Use the header hash to compute the MAC keys.
-	pes.macKeys = computeMACKeysSender(pes.header.Version, sender, ephemeralKey, receivers, pes.headerHash)
+	//
+	// TODO: Plumb the pre-computed shared keys above through to
+	// computeMACKeysSender.
+	pes.macKeys = computeMACKeysSender(version, sender, ephemeralKey, receivers, pes.headerHash)
 
 	return nil
 }
 
 func (pes *testEncryptStream) Close() error {
-	for pes.buffer.Len() > 0 {
-		err := pes.encryptBlock()
+	switch pes.version {
+	case Version1():
+		if pes.buffer.Len() > 0 {
+			err := pes.encryptBlock(false)
+			if err != nil {
+				return err
+			}
+		}
+
+		if pes.buffer.Len() > 0 {
+			panic(fmt.Sprintf("es.buffer.Len()=%d > 0", pes.buffer.Len()))
+		}
+
+		if pes.options.skipFooter {
+			return nil
+		}
+
+		return pes.encryptBlock(true)
+
+	case Version2():
+		isFinal := true
+
+		if pes.options.skipFooter {
+			isFinal = false
+		}
+
+		err := pes.encryptBlock(isFinal)
 		if err != nil {
 			return err
 		}
-	}
-	return pes.writeFooter()
-}
 
-func (pes *testEncryptStream) writeFooter() error {
-	var err error
-	if !pes.options.skipFooter {
-		err = pes.encryptBytes([]byte{})
+		if pes.buffer.Len() > 0 {
+			panic(fmt.Sprintf("pes.buffer.Len()=%d > 0", pes.buffer.Len()))
+		}
+
+		return nil
+
+	default:
+		panic(ErrBadVersion{pes.version})
 	}
-	return err
 }
 
 // Options are available mainly for testing.  Can't think of a good reason for
 // end-users to have to specify options.
 func newTestEncryptStream(version Version, ciphertext io.Writer, sender BoxSecretKey, receivers []BoxPublicKey, options testEncryptionOptions) (io.WriteCloser, error) {
 	pes := &testEncryptStream{
+		version: version,
 		output:  ciphertext,
 		encoder: newEncoder(ciphertext),
 		options: options,
-		inblock: make([]byte, options.getBlockSize()),
 	}
 	err := pes.init(version, sender, receivers)
 	return pes, err

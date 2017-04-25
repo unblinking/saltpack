@@ -41,13 +41,19 @@ type EncryptionHeader struct {
 	seqno           packetSeqno
 }
 
-// encryptionBlock contains a block of encrypted data. It contains
+// encryptionBlockV1 contains a block of encrypted data. It contains
 // the ciphertext, and any necessary authentication Tags.
-type encryptionBlock struct {
+type encryptionBlockV1 struct {
 	_struct            bool                   `codec:",toarray"`
 	HashAuthenticators []payloadAuthenticator `codec:"authenticators"`
 	PayloadCiphertext  []byte                 `codec:"ctext"`
-	seqno              packetSeqno
+}
+
+// encryptionBlockV2 is encryptionBlockV1, but with a flag signifying
+// whether or not this is the final packet.
+type encryptionBlockV2 struct {
+	encryptionBlockV1
+	IsFinal bool `codec:"final"`
 }
 
 func (h *EncryptionHeader) validate(versionValidator func(Version) error) error {

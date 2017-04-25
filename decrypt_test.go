@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func TestVersionValidator(t *testing.T) {
+func TestDecryptVersionValidator(t *testing.T) {
 	plaintext := []byte{0x01}
 	sender := newBoxKey(t)
 	receivers := []BoxPublicKey{newBoxKey(t).GetPublicKey()}
@@ -21,12 +21,13 @@ func TestVersionValidator(t *testing.T) {
 	}
 
 	_, _, err = Open(SingleVersionValidator(Version2()), ciphertext, kr)
-	if err == nil {
-		t.Fatal("Unexpected nil error")
+	expectedErr := ErrBadVersion{Version1()}
+	if err != expectedErr {
+		t.Fatalf("expected %v, got %v", expectedErr, err)
 	}
 }
 
-func testNewMinorVersion(t *testing.T, version Version) {
+func testDecryptNewMinorVersion(t *testing.T, version Version) {
 	plaintext := []byte{0x01}
 
 	newVersion := version
@@ -94,8 +95,8 @@ func testDecryptErrorAtEOF(t *testing.T, version Version) {
 
 func TestDecrypt(t *testing.T) {
 	tests := []func(*testing.T, Version){
-		testNewMinorVersion,
+		testDecryptNewMinorVersion,
 		testDecryptErrorAtEOF,
 	}
-	runTestsOverVersions(t, "test", tests)
+	runTestsOverVersions(t, "testDecrypt", tests)
 }

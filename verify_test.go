@@ -9,14 +9,14 @@ import (
 	"testing"
 )
 
-func TestVerify(t *testing.T) {
+func testVerify(t *testing.T, version Version) {
 	in := randomMsg(t, 128)
 	key := newSigPrivKey(t)
-	smsg, err := Sign(in, key)
+	smsg, err := Sign(version, in, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	skey, msg, err := Verify(smsg, kr)
+	skey, msg, err := Verify(SingleVersionValidator(version), smsg, kr)
 	if err != nil {
 		t.Logf("input:      %x", in)
 		t.Logf("signed msg: %x", smsg)
@@ -30,10 +30,48 @@ func TestVerify(t *testing.T) {
 	}
 }
 
-func TestVerifyConcurrent(t *testing.T) {
+func TestVerifyVersionValidator(t *testing.T) {
+	in := []byte{0x01}
+	key := newSigPrivKey(t)
+	smg, err := Sign(Version1(), in, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = Verify(SingleVersionValidator(Version2()), smg, kr)
+	expectedErr := ErrBadVersion{Version1()}
+	if err != expectedErr {
+		t.Fatalf("expected %v, got %v", expectedErr, err)
+	}
+}
+
+func testVerifyNewMinorVersion(t *testing.T, version Version) {
+	in := []byte{0x01}
+
+	newVersion := version
+	newVersion.Minor++
+
+	tso := testSignOptions{
+		corruptHeader: func(sh *SignatureHeader) {
+			sh.Version = newVersion
+		},
+	}
+	key := newSigPrivKey(t)
+	smg, err := testTweakSign(version, in, key, tso)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = Verify(SingleVersionValidator(newVersion), smg, kr)
+	if err != nil {
+		t.Fatalf("Unepected error %v", err)
+	}
+}
+
+func testVerifyConcurrent(t *testing.T, version Version) {
 	in := randomMsg(t, 128)
 	key := newSigPrivKey(t)
-	smsg, err := Sign(in, key)
+	smsg, err := Sign(version, in, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,11 +80,14 @@ func TestVerifyConcurrent(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		go func() {
-			skey, msg, err := Verify(smsg, kr)
+			defer wg.Done()
+			skey, msg, err := Verify(SingleVersionValidator(version), smsg, kr)
 			if err != nil {
 				t.Logf("input:      %x", in)
 				t.Logf("signed msg: %x", smsg)
 				t.Error(err)
+				// Don't fall through, as the tests below will panic.
+				return
 			}
 			if !PublicKeyEqual(skey, key.GetPublicKey()) {
 				t.Errorf("sender key %x, expected %x", skey.ToKID(), key.GetPublicKey().ToKID())
@@ -54,21 +95,20 @@ func TestVerifyConcurrent(t *testing.T) {
 			if !bytes.Equal(msg, in) {
 				t.Errorf("verified msg '%x', expected '%x'", msg, in)
 			}
-			wg.Done()
 		}()
 	}
 	wg.Wait()
 }
 
-func TestVerifyEmptyKeyring(t *testing.T) {
+func testVerifyEmptyKeyring(t *testing.T, version Version) {
 	in := randomMsg(t, 128)
 	key := newSigPrivKey(t)
-	smsg, err := Sign(in, key)
+	smsg, err := Sign(version, in, key)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, _, err = Verify(smsg, emptySigKeyring{})
+	_, _, err = Verify(SingleVersionValidator(version), smsg, emptySigKeyring{})
 	if err == nil {
 		t.Fatal("Verify worked with empty keyring")
 	}
@@ -77,15 +117,15 @@ func TestVerifyEmptyKeyring(t *testing.T) {
 	}
 }
 
-func TestVerifyDetachedEmptyKeyring(t *testing.T) {
+func testVerifyDetachedEmptyKeyring(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
 	msg := randomMsg(t, 128)
-	sig, err := SignDetached(msg, key)
+	sig, err := SignDetached(version, msg, key)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = VerifyDetached(msg, sig, emptySigKeyring{})
+	_, err = VerifyDetached(SingleVersionValidator(version), msg, sig, emptySigKeyring{})
 	if err == nil {
 		t.Fatal("VerifyDetached worked with empty keyring")
 	}
@@ -97,3 +137,14 @@ func TestVerifyDetachedEmptyKeyring(t *testing.T) {
 type emptySigKeyring struct{}
 
 func (k emptySigKeyring) LookupSigningPublicKey(kid []byte) SigningPublicKey { return nil }
+
+func TestVerify(t *testing.T) {
+	tests := []func(*testing.T, Version){
+		testVerify,
+		testVerifyNewMinorVersion,
+		testVerifyConcurrent,
+		testVerifyEmptyKeyring,
+		testVerifyDetachedEmptyKeyring,
+	}
+	runTestsOverVersions(t, "test", tests)
+}

@@ -27,12 +27,12 @@ type testSignStream struct {
 	savedBlock *signatureBlock
 }
 
-func newTestSignStream(w io.Writer, signer SigningSecretKey, opts testSignOptions) (*testSignStream, error) {
+func newTestSignStream(version Version, w io.Writer, signer SigningSecretKey, opts testSignOptions) (*testSignStream, error) {
 	if signer == nil {
 		return nil, ErrInvalidParameter{message: "no signing key provided"}
 	}
 
-	header, err := newSignatureHeader(signer.GetPublicKey(), MessageTypeAttachedSignature)
+	header, err := newSignatureHeader(version, signer.GetPublicKey(), MessageTypeAttachedSignature)
 	if err != nil {
 		return nil, err
 	}
@@ -153,9 +153,9 @@ func (s *testSignStream) computeSig(block *signatureBlock) ([]byte, error) {
 	return s.secretKey.Sign(attachedSignatureInput(s.headerHash, block))
 }
 
-func testTweakSign(plaintext []byte, signer SigningSecretKey, opts testSignOptions) ([]byte, error) {
+func testTweakSign(version Version, plaintext []byte, signer SigningSecretKey, opts testSignOptions) ([]byte, error) {
 	var buf bytes.Buffer
-	s, err := newTestSignStream(&buf, signer, opts)
+	s, err := newTestSignStream(version, &buf, signer, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -168,11 +168,11 @@ func testTweakSign(plaintext []byte, signer SigningSecretKey, opts testSignOptio
 	return buf.Bytes(), nil
 }
 
-func testTweakSignDetached(plaintext []byte, signer SigningSecretKey, opts testSignOptions) ([]byte, error) {
+func testTweakSignDetached(version Version, plaintext []byte, signer SigningSecretKey, opts testSignOptions) ([]byte, error) {
 	if signer == nil {
 		return nil, ErrInvalidParameter{message: "no signing key provided"}
 	}
-	header, err := newSignatureHeader(signer.GetPublicKey(), MessageTypeDetachedSignature)
+	header, err := newSignatureHeader(version, signer.GetPublicKey(), MessageTypeDetachedSignature)
 	if err != nil {
 		return nil, err
 	}

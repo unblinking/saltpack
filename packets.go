@@ -94,7 +94,7 @@ type SignatureHeader struct {
 	Nonce        []byte      `codec:"nonce"`
 }
 
-func newSignatureHeader(sender SigningPublicKey, msgType MessageType) (*SignatureHeader, error) {
+func newSignatureHeader(version Version, sender SigningPublicKey, msgType MessageType) (*SignatureHeader, error) {
 	if sender == nil {
 		return nil, ErrInvalidParameter{message: "no public signing key provided"}
 	}
@@ -105,7 +105,7 @@ func newSignatureHeader(sender SigningPublicKey, msgType MessageType) (*Signatur
 
 	header := &SignatureHeader{
 		FormatName:   FormatName,
-		Version:      CurrentVersion(),
+		Version:      version,
 		Type:         msgType,
 		SenderPublic: sender.ToKID(),
 		Nonce:        nonce[:],
@@ -114,15 +114,16 @@ func newSignatureHeader(sender SigningPublicKey, msgType MessageType) (*Signatur
 	return header, nil
 }
 
-func (h *SignatureHeader) validate(msgType MessageType) error {
+func (h *SignatureHeader) validate(versionValidator VersionValidator, msgType MessageType) error {
+	if err := versionValidator(h.Version); err != nil {
+		return err
+	}
+
 	if h.Type != msgType {
 		return ErrWrongMessageType{
 			wanted:   msgType,
 			received: h.Type,
 		}
-	}
-	if h.Version.Major != CurrentVersion().Major {
-		return ErrBadVersion{h.Version}
 	}
 
 	if msgType != MessageTypeAttachedSignature && msgType != MessageTypeDetachedSignature {

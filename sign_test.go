@@ -75,10 +75,10 @@ type sigNilPubKey struct{}
 func (s *sigNilPubKey) Sign(message []byte) ([]byte, error) { return nil, errors.New("sign error") }
 func (s *sigNilPubKey) GetPublicKey() SigningPublicKey      { return nil }
 
-func TestSign(t *testing.T) {
+func testSign(t *testing.T, version Version) {
 	msg := randomMsg(t, 128)
 	key := newSigPrivKey(t)
-	out, err := Sign(msg, key)
+	out, err := Sign(version, msg, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,36 +87,36 @@ func TestSign(t *testing.T) {
 	}
 }
 
-func TestSignConcurrent(t *testing.T) {
+func testSignConcurrent(t *testing.T, version Version) {
 	msg := randomMsg(t, 128)
 	key := newSigPrivKey(t)
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		go func() {
-			out, err := Sign(msg, key)
+			defer wg.Done()
+			out, err := Sign(version, msg, key)
 			if err != nil {
 				t.Error(err)
 			}
 			if len(out) == 0 {
 				t.Error("Sign returned no error and no output")
 			}
-			wg.Done()
 		}()
 	}
 	wg.Wait()
 }
 
-func testSignAndVerify(t *testing.T, message []byte) {
+func testSignAndVerify(t *testing.T, version Version, message []byte) {
 	key := newSigPrivKey(t)
-	smsg, err := Sign(message, key)
+	smsg, err := Sign(version, message, key)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(smsg) == 0 {
 		t.Fatal("Sign returned no error and no output")
 	}
-	skey, vmsg, err := Verify(smsg, kr)
+	skey, vmsg, err := Verify(SingleVersionValidator(version), smsg, kr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,15 +128,15 @@ func testSignAndVerify(t *testing.T, message []byte) {
 	}
 }
 
-func TestSignEmptyMessage(t *testing.T) {
+func testSignEmptyMessage(t *testing.T, version Version) {
 	var msg []byte
-	testSignAndVerify(t, msg)
+	testSignAndVerify(t, version, msg)
 }
 
-func TestSignEmptyStream(t *testing.T) {
+func testSignEmptyStream(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
 	var buf bytes.Buffer
-	s, err := NewSignStream(&buf, key)
+	s, err := NewSignStream(version, &buf, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestSignEmptyStream(t *testing.T) {
 		t.Fatal("empty signed message")
 	}
 
-	skey, vmsg, err := Verify(smsg, kr)
+	skey, vmsg, err := Verify(SingleVersionValidator(version), smsg, kr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,17 +161,17 @@ func TestSignEmptyStream(t *testing.T) {
 	}
 }
 
-func TestSignMessageSizes(t *testing.T) {
+func testSignMessageSizes(t *testing.T, version Version) {
 	sizes := []int{10, 128, 1024, 1100, 1024 * 10, 1024*10 + 64, 1024 * 100, 1024*100 + 99, 1024 * 1024 * 3}
 	for _, size := range sizes {
 		t.Logf("testing sign and verify message size = %d", size)
-		testSignAndVerify(t, randomMsg(t, size))
+		testSignAndVerify(t, version, randomMsg(t, size))
 	}
 }
 
-func TestSignTruncation(t *testing.T) {
+func testSignTruncation(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
-	smsg, err := Sign(randomMsg(t, 128), key)
+	smsg, err := Sign(version, randomMsg(t, 128), key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestSignTruncation(t *testing.T) {
 		t.Fatal("Sign returned no error and no output")
 	}
 	trunced := smsg[:len(smsg)-51]
-	skey, vmsg, err := Verify(trunced, kr)
+	skey, vmsg, err := Verify(SingleVersionValidator(version), trunced, kr)
 	if skey != nil {
 		t.Errorf("Verify returned a key for a truncated message")
 	}
@@ -192,18 +192,18 @@ func TestSignTruncation(t *testing.T) {
 
 }
 
-func TestSignSkipBlock(t *testing.T) {
+func testSignSkipBlock(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
 	var opts testSignOptions
 	numBlocks := 10
 	opts.skipBlock = func(n packetSeqno) bool {
 		return int(n) == numBlocks-1
 	}
-	smsg, err := testTweakSign(randomMsg(t, numBlocks*1024*1024), key, opts)
+	smsg, err := testTweakSign(version, randomMsg(t, numBlocks*1024*1024), key, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	skey, vmsg, err := Verify(smsg, kr)
+	skey, vmsg, err := Verify(SingleVersionValidator(version), smsg, kr)
 	if skey != nil {
 		t.Errorf("Verify returned a key for a message with a missing block")
 	}
@@ -215,14 +215,14 @@ func TestSignSkipBlock(t *testing.T) {
 	}
 }
 
-func TestSignSkipFooter(t *testing.T) {
+func testSignSkipFooter(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
 	opts := testSignOptions{skipFooter: true}
-	smsg, err := testTweakSign(randomMsg(t, 128), key, opts)
+	smsg, err := testTweakSign(version, randomMsg(t, 128), key, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	skey, vmsg, err := Verify(smsg, kr)
+	skey, vmsg, err := Verify(SingleVersionValidator(version), smsg, kr)
 	if skey != nil {
 		t.Errorf("Verify returned a key for a message without a footer")
 	}
@@ -234,14 +234,14 @@ func TestSignSkipFooter(t *testing.T) {
 	}
 }
 
-func TestSignSwapBlock(t *testing.T) {
+func testSignSwapBlock(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
 	opts := testSignOptions{swapBlock: true}
-	smsg, err := testTweakSign(randomMsg(t, 5*1024*1024), key, opts)
+	smsg, err := testTweakSign(version, randomMsg(t, 5*1024*1024), key, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	skey, vmsg, err := Verify(smsg, kr)
+	skey, vmsg, err := Verify(SingleVersionValidator(version), smsg, kr)
 	if skey != nil {
 		t.Errorf("Verify returned a key for a message without a footer")
 	}
@@ -253,10 +253,10 @@ func TestSignSwapBlock(t *testing.T) {
 	}
 }
 
-func TestSignDetached(t *testing.T) {
+func testSignDetached(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
 	msg := randomMsg(t, 128)
-	sig, err := SignDetached(msg, key)
+	sig, err := SignDetached(version, msg, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +264,7 @@ func TestSignDetached(t *testing.T) {
 		t.Fatal("empty sig and no error from SignDetached")
 	}
 
-	skey, err := VerifyDetached(msg, sig, kr)
+	skey, err := VerifyDetached(SingleVersionValidator(version), msg, sig, kr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,10 +273,10 @@ func TestSignDetached(t *testing.T) {
 	}
 }
 
-func TestSignDetachedVerifyAttached(t *testing.T) {
+func testSignDetachedVerifyAttached(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
 	msg := randomMsg(t, 128)
-	sig, err := SignDetached(msg, key)
+	sig, err := SignDetached(version, msg, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestSignDetachedVerifyAttached(t *testing.T) {
 	}
 
 	// try verifying detached signature using Verify instead of VerifyDetached
-	skey, vmsg, err := Verify(sig, kr)
+	skey, vmsg, err := Verify(SingleVersionValidator(version), sig, kr)
 	if err == nil {
 		t.Fatal("Verify succeeded, expected it to fail")
 	}
@@ -300,15 +300,15 @@ func TestSignDetachedVerifyAttached(t *testing.T) {
 	}
 }
 
-func TestSignAttachedVerifyDetached(t *testing.T) {
+func testSignAttachedVerifyDetached(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
 	msg := randomMsg(t, 128)
-	smsg, err := Sign(msg, key)
+	smsg, err := Sign(version, msg, key)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	skey, err := VerifyDetached(msg, smsg, kr)
+	skey, err := VerifyDetached(SingleVersionValidator(version), msg, smsg, kr)
 	if err == nil {
 		t.Fatal("VerifyDetached succeeded, expected it to fail")
 	}
@@ -320,32 +320,32 @@ func TestSignAttachedVerifyDetached(t *testing.T) {
 	}
 }
 
-func TestSignBadKey(t *testing.T) {
+func testSignBadKey(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
 	rand.Read(key.private[:])
 	msg := randomMsg(t, 128)
-	smsg, err := Sign(msg, key)
+	smsg, err := Sign(version, msg, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, err = Verify(smsg, kr)
+	_, _, err = Verify(SingleVersionValidator(version), smsg, kr)
 	if err != ErrBadSignature {
 		t.Errorf("error: %v, expected ErrBadSignature", err)
 	}
 
-	sig, err := SignDetached(msg, key)
+	sig, err := SignDetached(version, msg, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = VerifyDetached(msg, sig, kr)
+	_, err = VerifyDetached(SingleVersionValidator(version), msg, sig, kr)
 	if err != ErrBadSignature {
 		t.Errorf("error: %v, expected ErrBadSignature", err)
 	}
 }
 
-func TestSignNilKey(t *testing.T) {
+func testSignNilKey(t *testing.T, version Version) {
 	msg := randomMsg(t, 128)
-	_, err := Sign(msg, nil)
+	_, err := Sign(version, msg, nil)
 	if err == nil {
 		t.Fatal("Sign with nil key didn't fail")
 	}
@@ -353,7 +353,7 @@ func TestSignNilKey(t *testing.T) {
 		t.Errorf("error %T, expected ErrInvalidParameter", err)
 	}
 
-	_, err = SignDetached(msg, nil)
+	_, err = SignDetached(version, msg, nil)
 	if err == nil {
 		t.Fatal("SignDetached with nil key didn't fail")
 	}
@@ -362,7 +362,7 @@ func TestSignNilKey(t *testing.T) {
 	}
 }
 
-func TestSignBadRandReader(t *testing.T) {
+func testSignBadRandReader(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
 	msg := randomMsg(t, 128)
 
@@ -372,56 +372,59 @@ func TestSignBadRandReader(t *testing.T) {
 	}()
 	rand.Reader = errReader{}
 
-	_, err := Sign(msg, key)
+	_, err := Sign(version, msg, key)
 	if err == nil {
 		t.Errorf("Sign with errReader for rand.Reader didn't fail")
 	}
 }
 
-// test signing with a key that always returns errors for Sign().
-func TestSignErrSigner(t *testing.T) {
+// test signing with a key that always returns errors for Sign(version, ).
+func testSignErrSigner(t *testing.T, version Version) {
 	key := new(sigErrKey)
 	msg := randomMsg(t, 128)
-	_, err := Sign(msg, key)
+	_, err := Sign(version, msg, key)
 	if err == nil {
 		t.Errorf("Sign with err key didn't fail")
 	}
 
-	_, err = SignDetached(msg, key)
+	_, err = SignDetached(version, msg, key)
 	if err == nil {
 		t.Errorf("SignDetached with err key didn't fail")
 	}
 }
 
-func TestSignNilPubKey(t *testing.T) {
+func testSignNilPubKey(t *testing.T, version Version) {
 	key := new(sigNilPubKey)
 	msg := randomMsg(t, 128)
-	_, err := Sign(msg, key)
+	_, err := Sign(version, msg, key)
 	if err == nil {
 		t.Errorf("Sign with nil pub key didn't fail")
 	}
 
-	_, err = SignDetached(msg, key)
+	_, err = SignDetached(version, msg, key)
 	if err == nil {
 		t.Errorf("SignDetached with nil pub key didn't fail")
 	}
 }
 
-func TestSignCorruptHeader(t *testing.T) {
+func testSignCorruptHeader(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
 	msg := randomMsg(t, 128)
+
+	badVersion := version
+	badVersion.Major++
 
 	var opts testSignOptions
 
 	// first try with no corruption
-	smsg, err := testTweakSign(msg, key, opts)
+	smsg, err := testTweakSign(version, msg, key, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(smsg) == 0 {
 		t.Fatal("Sign returned no error and no output")
 	}
-	skey, vmsg, err := Verify(smsg, kr)
+	skey, vmsg, err := Verify(SingleVersionValidator(version), smsg, kr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -434,26 +437,28 @@ func TestSignCorruptHeader(t *testing.T) {
 
 	// change the version
 	opts.corruptHeader = func(sh *SignatureHeader) {
-		sh.Version = Version{Major: CurrentVersion().Major + 1, Minor: 0}
+		sh.Version = badVersion
 	}
-	smsg, err = testTweakSign(msg, key, opts)
+	smsg, err = testTweakSign(version, msg, key, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, err = Verify(smsg, kr)
-	if _, ok := err.(ErrBadVersion); !ok {
-		t.Errorf("error: %v (%T), expected ErrBadVersion", err, err)
+	_, _, err = Verify(SingleVersionValidator(version), smsg, kr)
+	if ebv, ok := err.(ErrBadVersion); !ok {
+		t.Fatalf("Got wrong error; wanted 'Bad Version' but got %v", err)
+	} else if ebv.received != badVersion {
+		t.Fatalf("got wrong version # in error message: %v", ebv.received)
 	}
 
 	// change the message type from attached to detached
 	opts.corruptHeader = func(sh *SignatureHeader) {
 		sh.Type = MessageTypeDetachedSignature
 	}
-	smsg, err = testTweakSign(msg, key, opts)
+	smsg, err = testTweakSign(version, msg, key, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, err = Verify(smsg, kr)
+	_, _, err = Verify(SingleVersionValidator(version), smsg, kr)
 	if _, ok := err.(ErrWrongMessageType); !ok {
 		t.Errorf("error: %v (%T), expected ErrWrongMessageType", err, err)
 	}
@@ -462,11 +467,11 @@ func TestSignCorruptHeader(t *testing.T) {
 	opts.corruptHeader = func(sh *SignatureHeader) {
 		sh.Type = MessageTypeEncryption
 	}
-	smsg, err = testTweakSign(msg, key, opts)
+	smsg, err = testTweakSign(version, msg, key, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, err = Verify(smsg, kr)
+	_, _, err = Verify(SingleVersionValidator(version), smsg, kr)
 	if _, ok := err.(ErrWrongMessageType); !ok {
 		t.Errorf("error: %v (%T), expected ErrWrongMessageType", err, err)
 	}
@@ -478,39 +483,39 @@ func TestSignCorruptHeader(t *testing.T) {
 			*bytes = badBytes
 		},
 	}
-	smsg, err = testTweakSign(msg, key, opts)
+	smsg, err = testTweakSign(version, msg, key, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, err = Verify(smsg, kr)
+	_, _, err = Verify(SingleVersionValidator(version), smsg, kr)
 	if err == nil {
 		t.Fatal(err)
 	}
 
 	// truncate the message in the middle of the header
-	smsg, err = testTweakSign(msg, key, testSignOptions{})
+	smsg, err = testTweakSign(version, msg, key, testSignOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	truncated := smsg[0:10]
-	_, _, err = Verify(truncated, kr)
+	_, _, err = Verify(SingleVersionValidator(version), truncated, kr)
 	if err == nil {
 		t.Fatal(err)
 	}
 }
 
-func TestSignDetachedCorruptHeader(t *testing.T) {
+func testSignDetachedCorruptHeader(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
 	msg := randomMsg(t, 128)
 
 	var opts testSignOptions
 
 	// first try with no corruption
-	sig, err := testTweakSignDetached(msg, key, opts)
+	sig, err := testTweakSignDetached(version, msg, key, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	skey, err := VerifyDetached(msg, sig, kr)
+	skey, err := VerifyDetached(SingleVersionValidator(version), msg, sig, kr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -522,11 +527,11 @@ func TestSignDetachedCorruptHeader(t *testing.T) {
 	opts.corruptHeader = func(sh *SignatureHeader) {
 		sh.Type = MessageTypeAttachedSignature
 	}
-	sig, err = testTweakSignDetached(msg, key, opts)
+	sig, err = testTweakSignDetached(version, msg, key, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = VerifyDetached(msg, sig, kr)
+	_, err = VerifyDetached(SingleVersionValidator(version), msg, sig, kr)
 	if _, ok := err.(ErrWrongMessageType); !ok {
 		t.Errorf("error: %v (%T), expected ErrWrongMessageType", err, err)
 	}
@@ -535,21 +540,21 @@ func TestSignDetachedCorruptHeader(t *testing.T) {
 	opts.corruptHeader = func(sh *SignatureHeader) {
 		sh.Type = MessageTypeEncryption
 	}
-	sig, err = testTweakSignDetached(msg, key, opts)
+	sig, err = testTweakSignDetached(version, msg, key, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = VerifyDetached(msg, sig, kr)
+	_, err = VerifyDetached(SingleVersionValidator(version), msg, sig, kr)
 	if _, ok := err.(ErrWrongMessageType); !ok {
 		t.Errorf("error: %v (%T), expected ErrWrongMessageType", err, err)
 	}
 }
 
-func TestSignDetachedTruncated(t *testing.T) {
+func testSignDetachedTruncated(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
 	msg := randomMsg(t, 128)
 
-	sig, err := testTweakSignDetached(msg, key, testSignOptions{})
+	sig, err := testTweakSignDetached(version, msg, key, testSignOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -557,7 +562,7 @@ func TestSignDetachedTruncated(t *testing.T) {
 	// truncate the sig by one byte
 	shortSig := sig[0 : len(sig)-1]
 
-	_, err = VerifyDetached(msg, shortSig, kr)
+	_, err = VerifyDetached(SingleVersionValidator(version), msg, shortSig, kr)
 	if err == nil {
 		t.Fatal("expected EOF error from truncated sig")
 	}
@@ -566,3 +571,29 @@ func TestSignDetachedTruncated(t *testing.T) {
 type errReader struct{}
 
 func (e errReader) Read(p []byte) (int, error) { return 0, errors.New("read error") }
+
+func TestSign(t *testing.T) {
+	tests := []func(*testing.T, Version){
+		testSign,
+		testSignConcurrent,
+		testSignEmptyMessage,
+		testSignEmptyStream,
+		testSignMessageSizes,
+		testSignTruncation,
+		testSignSkipBlock,
+		testSignSkipFooter,
+		testSignSwapBlock,
+		testSignDetached,
+		testSignDetachedVerifyAttached,
+		testSignAttachedVerifyDetached,
+		testSignBadKey,
+		testSignNilKey,
+		testSignBadRandReader,
+		testSignErrSigner,
+		testSignNilPubKey,
+		testSignCorruptHeader,
+		testSignDetachedCorruptHeader,
+		testSignDetachedTruncated,
+	}
+	runTestsOverVersions(t, "test", tests)
+}

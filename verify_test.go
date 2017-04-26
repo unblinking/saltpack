@@ -209,3 +209,19 @@ func TestHardcodedSignedMessageV1(t *testing.T) {
 	require.Equal(t, "test message!", string(plaintext))
 	require.Equal(t, decodedKey, signer.ToKID())
 }
+
+const hardcodedV1DetachedSignature = `
+BEGIN KEYBASE SALTPACK DETACHED SIGNATURE. kXR7VktZdyH7rvq v5wcIkPOwOUCix9
+HfoZZdGgIjzeYWi Nu9smFqPCiRfB9h PAUmWFHLkUaLXQd DTZrK37uaKi9dgf 60zJCgqbheQLTVP
+Vr2Dw2x1MLOenwI dt3P0dRsyh2WvQW OeqH28kbuzPiA0f OPQ0Y26dpV8A8uE DUDdJed0edSYEbx
+v. END KEYBASE SALTPACK DETACHED SIGNATURE.
+`
+
+func TestHardcodedDetachedSignatureV1(t *testing.T) {
+	decodedKey, err := hex.DecodeString(hardcodedVerifyKey)
+	require.NoError(t, err)
+	keyring := pubkeyOnlySigKeyring{}
+	signer, _, err := Dearmor62VerifyDetached(SingleVersionValidator(Version1()), []byte("test message!"), hardcodedV1DetachedSignature, keyring)
+	require.NoError(t, err)
+	require.Equal(t, decodedKey, signer.ToKID())
+}

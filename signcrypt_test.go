@@ -176,7 +176,8 @@ func getPayloadPacketLen(plaintextLen int) int {
 		bytesOverhead = 5
 	}
 	listOverhead := 1 // fixarray
-	return plaintextLen + ed25519.SignatureSize + poly1305.TagSize + bytesOverhead + listOverhead
+	boolOverhead := 1 // for IsFinal flag
+	return plaintextLen + ed25519.SignatureSize + poly1305.TagSize + bytesOverhead + listOverhead + boolOverhead
 }
 
 func TestSigncryptionPacketSwappingWithinMessage(t *testing.T) {
@@ -192,22 +193,109 @@ func TestSigncryptionPacketSwappingWithinMessage(t *testing.T) {
 	headerLen := getHeaderLen(t, sealed)
 	packetLen := getPayloadPacketLen(encryptionBlockSize)
 	packet2Start := headerLen + packetLen
-	emptyPacketLen := getPayloadPacketLen(0)
-	emptyPacketStart := packet2Start + packetLen
-	require.Equal(t, headerLen+2*packetLen+emptyPacketLen, len(sealed), "sealed bytes aren't the length we expected")
+	require.Equal(t, headerLen+2*packetLen, len(sealed), "sealed bytes aren't the length we expected")
 	header := sealed[:headerLen]
 	packet1 := sealed[headerLen:packet2Start]
-	packet2 := sealed[packet2Start:emptyPacketStart]
-	emptyPacket := sealed[emptyPacketStart:]
+	packet2 := sealed[packet2Start:]
 
 	// Assert that swapping packets 1 and 2 fails to decrypt. (Start with a
 	// fresh slice to avoid confusing overwrites.)
 	swapped_sealed := append([]byte{}, header...)
 	swapped_sealed = append(swapped_sealed, packet2...)
 	swapped_sealed = append(swapped_sealed, packet1...)
-	swapped_sealed = append(swapped_sealed, emptyPacket...)
 	_, _, err = SigncryptOpen(swapped_sealed, keyring, nil)
 	require.Equal(t, ErrBadCiphertext(1), err)
+}
+
+func TestSigncryptionSinglePacket(t *testing.T) {
+	msg := make([]byte, encryptionBlockSize)
+	keyring, receiverBoxKeys := makeKeyringWithOneKey(t)
+
+	senderSigningPrivKey := makeSigningKey(t, keyring)
+
+	sealed, err := SigncryptSeal(msg, keyring, senderSigningPrivKey, receiverBoxKeys, nil)
+	require.NoError(t, err)
+
+	mps := newMsgpackStream(bytes.NewReader(sealed))
+
+	var headerBytes []byte
+	_, err = mps.Read(&headerBytes)
+	require.NoError(t, err)
+
+	var block signcryptionBlock
+
+	// Payload packet.
+	_, err = mps.Read(&block)
+	require.NoError(t, err)
+
+	// Nothing else.
+	_, err = mps.Read(&block)
+	require.Equal(t, io.EOF, err)
+}
+
+func testSigncryptionSubsequence(t *testing.T, anon bool) {
+	msg := make([]byte, 2*encryptionBlockSize)
+	keyring, receiverBoxKeys := makeKeyringWithOneKey(t)
+
+	var senderSigningPrivKey SigningSecretKey
+	if !anon {
+		senderSigningPrivKey = makeSigningKey(t, keyring)
+	}
+
+	sealed, err := SigncryptSeal(msg, keyring, senderSigningPrivKey, receiverBoxKeys, nil)
+	require.NoError(t, err)
+
+	mps := newMsgpackStream(bytes.NewReader(sealed))
+
+	// These truncated ciphertexts will have the first payload
+	// packet and the second payload packet, respectively.
+	truncatedCiphertext1 := bytes.NewBuffer(nil)
+	truncatedCiphertext2 := bytes.NewBuffer(nil)
+	encoder1 := newEncoder(truncatedCiphertext1)
+	encoder2 := newEncoder(truncatedCiphertext2)
+
+	encode := func(e encoder, i interface{}) {
+		err = e.Encode(i)
+		require.NoError(t, err)
+	}
+
+	var headerBytes []byte
+	_, err = mps.Read(&headerBytes)
+	require.NoError(t, err)
+
+	encode(encoder1, headerBytes)
+	encode(encoder2, headerBytes)
+
+	var block signcryptionBlock
+
+	// Payload packet 1.
+	_, err = mps.Read(&block)
+	require.NoError(t, err)
+
+	block.IsFinal = true
+	encode(encoder1, block)
+
+	// Payload packet 2.
+	_, err = mps.Read(&block)
+	require.NoError(t, err)
+
+	block.IsFinal = true
+	encode(encoder2, block)
+
+	_, _, err = SigncryptOpen(truncatedCiphertext1.Bytes(), keyring, nil)
+	require.Equal(t, ErrBadCiphertext(1), err)
+
+	_, _, err = SigncryptOpen(truncatedCiphertext2.Bytes(), keyring, nil)
+	require.Equal(t, ErrBadCiphertext(1), err)
+}
+
+func TestSigncryptionSubsequence(t *testing.T) {
+	t.Run("anon=false", func(t *testing.T) {
+		testSigncryptionSubsequence(t, false)
+	})
+	t.Run("anon=true", func(t *testing.T) {
+		testSigncryptionSubsequence(t, true)
+	})
 }
 
 func TestSigncryptionPacketSwappingBetweenMessages(t *testing.T) {
@@ -282,11 +370,11 @@ func TestSigncryptionStreamWithError(t *testing.T) {
 
 	// Try to read the whole thing. This should return an error.
 	_, err = ioutil.ReadAll(reader)
-	require.Equal(t, ErrBadCiphertext(2), err)
+	require.Equal(t, ErrBadCiphertext(1), err)
 
 	// Do it again. Should get the same error.
 	_, err = ioutil.ReadAll(reader)
-	require.Equal(t, ErrBadCiphertext(2), err)
+	require.Equal(t, ErrBadCiphertext(1), err)
 }
 
 func TestSigncryptionInvalidMessagepack(t *testing.T) {

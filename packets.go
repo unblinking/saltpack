@@ -71,7 +71,7 @@ type SigncryptionHeader EncryptionHeader
 type signcryptionBlock struct {
 	_struct           bool   `codec:",toarray"`
 	PayloadCiphertext []byte `codec:"ctext"`
-	seqno             packetSeqno
+	IsFinal           bool   `codec:"final"`
 }
 
 func (h *SigncryptionHeader) validate() error {

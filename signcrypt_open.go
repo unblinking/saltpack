@@ -22,7 +22,7 @@ type signcryptOpenStream struct {
 	signingPublicKey SigningPublicKey
 	senderAnonymous  bool
 	buf              []byte
-	headerHash       []byte
+	headerHash       headerHash
 	keyring          SigncryptKeyring
 	resolver         SymmetricKeyResolver
 }
@@ -65,13 +65,21 @@ func (sos *signcryptOpenStream) read(b []byte) (n int, err error) {
 
 		if last {
 			sos.state = stateEndOfStream
+			// If we've reached the end of the stream, but
+			// have data left,
+			// return so that the next call(s) will hit
+			// the case at the top, and then we'll hit the
+			// case below.
+			if len(sos.buf) > 0 {
+				return n, nil
+			}
 		}
 	}
 
 	if sos.state == stateEndOfStream {
 		sos.err = assertEndOfStream(sos.mps)
 		if sos.err != nil {
-			return 0, sos.err
+			return n, sos.err
 		}
 	}
 
@@ -86,8 +94,7 @@ func (sos *signcryptOpenStream) readHeader(rawReader io.Reader) error {
 		return ErrFailedToReadHeaderBytes
 	}
 	// Compute the header hash.
-	headerHash := sha512.Sum512(headerBytes)
-	sos.headerHash = headerHash[:]
+	sos.headerHash = sha512.Sum512(headerBytes)
 	// Parse the header bytes.
 	var header SigncryptionHeader
 	err = decodeFromBytes(&header, headerBytes)
@@ -110,14 +117,10 @@ func (sos *signcryptOpenStream) readBlock(b []byte) (n int, lastBlock bool, err 
 	if err != nil {
 		return 0, false, err
 	}
-	sb.seqno = seqno
 	var plaintext []byte
-	plaintext, err = sos.processSigncryptionBlock(&sb)
+	plaintext, err = sos.processSigncryptionBlock(sb.PayloadCiphertext, sb.IsFinal, seqno)
 	if err != nil {
 		return 0, false, err
-	}
-	if plaintext == nil {
-		return 0, true, err
 	}
 
 	// Copy as much as we can into the given outbuffer
@@ -125,7 +128,7 @@ func (sos *signcryptOpenStream) readBlock(b []byte) (n int, lastBlock bool, err 
 	// Leave the remainder for a subsequent read
 	sos.buf = plaintext[n:]
 
-	return n, false, err
+	return n, sb.IsFinal, err
 }
 
 func (sos *signcryptOpenStream) tryBoxSecretKeys(hdr *SigncryptionHeader, ephemeralPub BoxPublicKey) (*SymmetricKey, error) {
@@ -246,34 +249,28 @@ func (sos *signcryptOpenStream) processSigncryptionHeader(hdr *SigncryptionHeade
 	return nil
 }
 
-func (sos *signcryptOpenStream) processSigncryptionBlock(bl *signcryptionBlock) ([]byte, error) {
+func (sos *signcryptOpenStream) processSigncryptionBlock(payloadCiphertext []byte, isFinal bool, seqno packetSeqno) ([]byte, error) {
 
-	blockNum := encryptionBlockNumber(bl.seqno - 1)
+	blockNum := encryptionBlockNumber(seqno - 1)
 
 	if err := blockNum.check(); err != nil {
 		return nil, err
 	}
 
-	nonce := nonceForChunkSigncryption(blockNum)
+	nonce := nonceForChunkSigncryption(sos.headerHash, isFinal, blockNum)
 
-	attachedSig, isValid := secretbox.Open([]byte{}, bl.PayloadCiphertext, (*[24]byte)(&nonce), (*[32]byte)(sos.payloadKey))
+	attachedSig, isValid := secretbox.Open([]byte{}, payloadCiphertext, (*[24]byte)(&nonce), (*[32]byte)(sos.payloadKey))
 	if !isValid || len(attachedSig) < ed25519.SignatureSize {
-		return nil, ErrBadCiphertext(bl.seqno)
+		return nil, ErrBadCiphertext(seqno)
 	}
 
 	var detachedSig [ed25519.SignatureSize]byte = sliceToByte64(attachedSig[:ed25519.SignatureSize])
 	chunkPlaintext := attachedSig[ed25519.SignatureSize:]
 
-	plaintextHash := sha512.Sum512(chunkPlaintext)
-
-	signatureInput := []byte(signatureEncryptedString)
-	signatureInput = append(signatureInput, sos.headerHash...)
-	signatureInput = append(signatureInput, nonce[:]...)
-	signatureInput = append(signatureInput, plaintextHash[:]...)
-
 	// Handle anonymous sender mode by skipping signature verification. By
 	// convention the signature bytes are all zeroes, but here we ignore them.
 	if !sos.senderAnonymous {
+		signatureInput := computeSigncryptionSignatureInput(sos.headerHash, nonce, isFinal, chunkPlaintext)
 		sigErr := sos.signingPublicKey.Verify(signatureInput, detachedSig[:])
 		if sigErr != nil {
 			return nil, ErrBadSignature

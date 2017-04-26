@@ -5,11 +5,14 @@ package saltpack
 
 import (
 	"bytes"
+	"encoding/hex"
 	"errors"
 	"io"
 	"io/ioutil"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestVerifyVersionValidator(t *testing.T) {
@@ -178,4 +181,31 @@ func TestVerify(t *testing.T) {
 		testVerifyErrorAtEOF,
 	}
 	runTestsOverVersions(t, "test", tests)
+}
+
+type pubkeyOnlySigKeyring struct{}
+
+func (p pubkeyOnlySigKeyring) LookupSigningPublicKey(kid []byte) SigningPublicKey {
+	return newSigPubKey(kid)
+}
+
+const hardcodedV1SignedMessage = `
+BEGIN KEYBASE SALTPACK SIGNED MESSAGE. kXR7VktZdyH7rvq v5wcIkHbsMGwMrf
+bu4PmUTnBUI2QWi Nu9smFqPCiRfB9h PAUmWFHLkTKGMdN tdrKMtkDu0UhJEj 7gM6Tt8OeykFHq9
+R4FnzgakB19YwYa CGVfWxxXpK9OaMI S00BurzWOWBXIxe EoTHvgyx1oHUVdX HRNjJCXTvsSJVa8
+Qyg3bN37HAfS8ek gZG6JflV06S2Olp gLdhxNZKIo2zF9P sD5pDFXvoVVzeNC D4vZtMiNQrniEYo
+qY903nTYqyGQ4yl UULZ6yP14CcSPfg 8r8CXVi5Z2. END KEYBASE SALTPACK SIGNED
+MESSAGE.
+`
+
+const hardcodedVerifyKey = "f596585d050597c03a87d653c4be89f7327dbd86b921dd05acfc9df33eb7a962"
+
+func TestHardcodedSignedMessageV1(t *testing.T) {
+	decodedKey, err := hex.DecodeString(hardcodedVerifyKey)
+	require.NoError(t, err)
+	keyring := pubkeyOnlySigKeyring{}
+	signer, plaintext, _, err := Dearmor62Verify(SingleVersionValidator(Version1()), hardcodedV1SignedMessage, keyring)
+	require.NoError(t, err)
+	require.Equal(t, "test message!", string(plaintext))
+	require.Equal(t, decodedKey, signer.ToKID())
 }

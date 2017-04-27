@@ -84,9 +84,7 @@ func (sss *signcryptSealStream) signcryptBlock(isFinal bool) error {
 
 	ciphertext := secretbox.Seal([]byte{}, attachedSig, (*[24]byte)(&nonce), (*[32]byte)(&sss.encryptionKey))
 
-	if err := checkCiphertextState(sss.version, ciphertext, isFinal); err != nil {
-		panic(err)
-	}
+	assertEncodedChunkState(sss.version, ciphertext, secretbox.Overhead, uint64(sss.numBlocks), isFinal)
 
 	block := signcryptionBlock{
 		PayloadCiphertext: ciphertext,

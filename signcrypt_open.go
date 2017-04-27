@@ -16,77 +16,42 @@ import (
 
 type signcryptOpenStream struct {
 	mps              *msgpackStream
-	err              error
-	state            readState
 	payloadKey       *SymmetricKey
 	signingPublicKey SigningPublicKey
 	senderAnonymous  bool
-	buf              []byte
 	headerHash       headerHash
 	keyring          SigncryptKeyring
 	resolver         SymmetricKeyResolver
 }
 
-func (sos *signcryptOpenStream) Read(b []byte) (n int, err error) {
-	for n == 0 && err == nil {
-		n, err = sos.read(b)
+func (sos *signcryptOpenStream) getNextChunk() ([]byte, error) {
+	var sb signcryptionBlock
+	seqno, err := sos.mps.Read(&sb)
+	if err != nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+		return nil, err
 	}
-	if err == io.EOF && sos.state != stateEndOfStream {
-		err = io.ErrUnexpectedEOF
+
+	chunk, err := sos.processBlock(sb.PayloadCiphertext, sb.IsFinal, seqno)
+	if err != nil {
+		return nil, err
 	}
-	return n, err
+
+	err = checkDecodedChunkState(Version2(), chunk, seqno, sb.IsFinal)
+	if err != nil {
+		return nil, err
+	}
+
+	if sb.IsFinal {
+		return chunk, assertEndOfStream(sos.mps)
+	}
+
+	return chunk, nil
 }
 
-func (sos *signcryptOpenStream) read(b []byte) (n int, err error) {
-
-	// Handle the case of a previous error. Just return the error
-	// again.
-	if sos.err != nil {
-		return 0, sos.err
-	}
-
-	// Handle the case first of a previous read that couldn't put all
-	// of its data into the outgoing buffer.
-	if len(sos.buf) > 0 {
-		n = copy(b, sos.buf)
-		sos.buf = sos.buf[n:]
-		return n, nil
-	}
-
-	// We have two states we can be in, but we can definitely
-	// fall through during one read, so be careful.
-
-	if sos.state == stateBody {
-		var last bool
-		n, last, sos.err = sos.readBlock(b)
-		if sos.err != nil {
-			return 0, sos.err
-		}
-
-		if last {
-			sos.state = stateEndOfStream
-			// If we've reached the end of the stream, but
-			// have data left,
-			// return so that the next call(s) will hit
-			// the case at the top, and then we'll hit the
-			// case below.
-			if len(sos.buf) > 0 {
-				return n, nil
-			}
-		}
-	}
-
-	if sos.state == stateEndOfStream {
-		sos.err = assertEndOfStream(sos.mps)
-		if sos.err != nil {
-			return n, sos.err
-		}
-	}
-
-	return n, nil
-}
-
-func (sos *signcryptOpenStream) readHeader(rawReader io.Reader) error {
+func (sos *signcryptOpenStream) readHeader() error {
 	// Read the header bytes.
 	headerBytes := []byte{}
 	seqno, err := sos.mps.Read(&headerBytes)
@@ -106,29 +71,7 @@ func (sos *signcryptOpenStream) readHeader(rawReader io.Reader) error {
 	if err != nil {
 		return err
 	}
-	sos.state = stateBody
 	return nil
-}
-
-func (sos *signcryptOpenStream) readBlock(b []byte) (n int, lastBlock bool, err error) {
-	var sb signcryptionBlock
-	var seqno packetSeqno
-	seqno, err = sos.mps.Read(&sb)
-	if err != nil {
-		return 0, false, err
-	}
-	var plaintext []byte
-	plaintext, err = sos.processSigncryptionBlock(sb.PayloadCiphertext, sb.IsFinal, seqno)
-	if err != nil {
-		return 0, false, err
-	}
-
-	// Copy as much as we can into the given outbuffer
-	n = copy(b, plaintext)
-	// Leave the remainder for a subsequent read
-	sos.buf = plaintext[n:]
-
-	return n, sb.IsFinal, err
 }
 
 func (sos *signcryptOpenStream) tryBoxSecretKeys(hdr *SigncryptionHeader, ephemeralPub BoxPublicKey) (*SymmetricKey, error) {
@@ -249,7 +192,7 @@ func (sos *signcryptOpenStream) processSigncryptionHeader(hdr *SigncryptionHeade
 	return nil
 }
 
-func (sos *signcryptOpenStream) processSigncryptionBlock(payloadCiphertext []byte, isFinal bool, seqno packetSeqno) ([]byte, error) {
+func (sos *signcryptOpenStream) processBlock(payloadCiphertext []byte, isFinal bool, seqno packetSeqno) ([]byte, error) {
 
 	blockNum := encryptionBlockNumber(seqno - 1)
 
@@ -277,10 +220,6 @@ func (sos *signcryptOpenStream) processSigncryptionBlock(payloadCiphertext []byt
 		}
 	}
 
-	// The encoding of the empty buffer implies the EOF.  But otherwise, all mechanisms are the same.
-	if len(chunkPlaintext) == 0 {
-		return nil, nil
-	}
 	return chunkPlaintext, nil
 }
 
@@ -303,12 +242,12 @@ func NewSigncryptOpenStream(r io.Reader, keyring SigncryptKeyring, resolver Symm
 		resolver: resolver,
 	}
 
-	err = sos.readHeader(r)
+	err = sos.readHeader()
 	if err != nil {
-		return sos.signingPublicKey, nil, err
+		return nil, nil, err
 	}
 
-	return sos.signingPublicKey, sos, nil
+	return sos.signingPublicKey, newChunkReader(sos), nil
 }
 
 type SymmetricKeyResolver interface {

@@ -13,7 +13,6 @@ import (
 	mathrand "math/rand"
 
 	"github.com/keybase/go-codec/codec"
-	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/crypto/poly1305"
 )
 
@@ -67,6 +66,10 @@ func (e encryptionBlockNumber) check() error {
 	return nil
 }
 
+// assertEndOfStream reads from stream, and converts a nil error into
+// ErrTrailingGarbage. Thus, it always returns a non-nil error. This
+// should be used in a context where io.EOF is expected, and anything
+// else is an error.
 func assertEndOfStream(stream *msgpackStream) error {
 	var i interface{}
 	_, err := stream.Read(&i)
@@ -189,46 +192,6 @@ func sum512Truncate256(in []byte) [32]byte {
 	return sliceToByte32(sum512[:32])
 }
 
-// checkCiphertextState sanity-checks some ciphertext parameters. When
-// called by the encryptor, a non-nil error should cause a panic, but
-// when called by the decryptor, it should be treated as a regular
-// error.
-func checkCiphertextState(version Version, ciphertext []byte, isFinal bool) error {
-	makeErr := func() error {
-		return fmt.Errorf("invalid ciphertext state: version=%s, len(ciphertext)=%d, isFinal=%t", version, len(ciphertext), isFinal)
-	}
-
-	if len(ciphertext) < secretbox.Overhead {
-		return makeErr()
-	}
-
-	switch version.Major {
-	case 1:
-		if (len(ciphertext) == secretbox.Overhead) != isFinal {
-			return makeErr()
-		}
-
-	case 2:
-		// With V2, it's valid to have a final packet with
-		// non-empty plaintext, so the below is the only
-		// remaining invalid state.
-		//
-		// TODO: Ideally, we'd disallow empty packets even
-		// with isFinal set, but we still want to allow
-		// encrypting an empty message. Plumb through an
-		// isFirst flag and change "!isFinal" to "!isFirst ||
-		// !isFinal".
-		if (len(ciphertext) == secretbox.Overhead) && !isFinal {
-			return makeErr()
-		}
-
-	default:
-		panic(ErrBadVersion{version})
-	}
-
-	return nil
-}
-
 func computePayloadHash(version Version, headerHash headerHash, nonce Nonce, ciphertext []byte, isFinal bool) payloadHash {
 	payloadDigest := sha512.New()
 	payloadDigest.Write(headerHash[:])
@@ -300,33 +263,20 @@ func SingleVersionValidator(desiredVersion Version) VersionValidator {
 	}
 }
 
-// checkSignatureState sanity-checks some signature parameters. When
-// called by the signer, a non-nil error should cause a panic, but
-// when called by the verifier, it should be treated as a regular
-// error.
-func checkSignatureState(version Version, chunk []byte, isFinal bool) error {
-	makeErr := func() error {
-		return fmt.Errorf("invalid signature state: version=%s, len(chunk)=%d, isFinal=%t", version, len(chunk), isFinal)
-	}
-
+func checkChunkState(version Version, chunkLen int, blockIndex uint64, isFinal bool) error {
 	switch version.Major {
 	case 1:
-		if (len(chunk) == 0) != isFinal {
-			return makeErr()
+		// For V1, we derive isFinal from the chunk length, so
+		// if there's a mismatch, that's a bug and not a
+		// stream error.
+		if (chunkLen == 0) != isFinal {
+			panic(fmt.Sprintf("chunkLen=%d and isFinal=%t", chunkLen, isFinal))
 		}
 
 	case 2:
-		// With V2, it's valid to have a final packet with
-		// non-empty chunk, so the below is the only remaining
-		// invalid state.
-		//
-		// TODO: Ideally, we'd disallow empty packets even
-		// with isFinal set, but we still want to allow
-		// signing an empty message. Plumb through an isFirst
-		// flag and change "!isFinal" to "!isFirst ||
-		// !isFinal".
-		if (len(chunk) == 0) && !isFinal {
-			return makeErr()
+		// TODO: Ideally, we'd have tests exercising this case.
+		if (chunkLen == 0) && (blockIndex != 0 || !isFinal) {
+			return ErrUnexpectedEmptyBlock
 		}
 
 	default:
@@ -334,4 +284,25 @@ func checkSignatureState(version Version, chunk []byte, isFinal bool) error {
 	}
 
 	return nil
+}
+
+// assertEncodedChunkState sanity-checks some encoded chunk parameters.
+func assertEncodedChunkState(version Version, encodedChunk []byte, encodingOverhead int, blockIndex uint64, isFinal bool) {
+	if len(encodedChunk) < encodingOverhead {
+		panic("encodedChunk is too small")
+	}
+
+	err := checkChunkState(version, len(encodedChunk)-encodingOverhead, blockIndex, isFinal)
+	if err != nil {
+		panic(err)
+	}
+}
+
+// checkDecodedChunkState sanity-checks some decoded chunk
+// parameters. A returned error means there's something wrong with the
+// decoded stream.
+func checkDecodedChunkState(version Version, chunk []byte, seqno packetSeqno, isFinal bool) error {
+	// The first decoded block has seqno 1, since the header bytes
+	// are decoded first.
+	return checkChunkState(version, len(chunk), uint64(seqno-1), isFinal)
 }

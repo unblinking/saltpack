@@ -24,7 +24,7 @@ func NewVerifyStream(versionValidator VersionValidator, r io.Reader, keyring Sig
 		return nil, nil, ErrNoSenderKey
 	}
 	s.publicKey = skey
-	return skey, s, nil
+	return skey, newChunkReader(s), nil
 }
 
 // Verify checks the signature in signedMsg. It returns the
@@ -56,7 +56,7 @@ func VerifyDetachedReader(versionValidator VersionValidator, message io.Reader, 
 
 	// Reach inside the verifyStream to parse the signature bytes.
 	var naclSignature []byte
-	_, err = s.stream.Read(&naclSignature)
+	_, err = s.mps.Read(&naclSignature)
 	if err != nil {
 		return nil, err
 	}

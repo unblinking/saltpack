@@ -137,6 +137,23 @@ func TestSigncryptionEmptyCiphertext(t *testing.T) {
 	require.Equal(t, ErrFailedToReadHeaderBytes, err)
 }
 
+func TestSigncryptionMultiPacket(t *testing.T) {
+	msg := make([]byte, encryptionBlockSize*2)
+	keyring, receiverBoxKeys := makeKeyringWithOneKey(t)
+
+	senderSigningPrivKey := makeSigningKey(t, keyring)
+
+	sealed, err := SigncryptSeal(msg, keyring, senderSigningPrivKey, receiverBoxKeys, nil)
+	require.NoError(t, err)
+
+	senderPub, opened, err := SigncryptOpen(sealed, keyring, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, senderSigningPrivKey.GetPublicKey(), senderPub)
+
+	require.Equal(t, msg, opened)
+}
+
 func getHeaderLen(t *testing.T, sealed []byte) int {
 	// Assert the MessagePack bin8 type.
 	require.Equal(t, byte(0xc4), sealed[0])
@@ -348,10 +365,12 @@ func TestSigncryptionStream(t *testing.T) {
 	for {
 		buffer := make([]byte, 1)
 		n, err := reader.Read(buffer)
-		if n == 0 || err == io.EOF {
+		output = append(output, buffer[:n]...)
+		if err == io.EOF {
 			break
 		}
-		output = append(output, buffer...)
+		require.NoError(t, err)
+		require.True(t, n > 0)
 	}
 	require.Equal(t, msg, output)
 }

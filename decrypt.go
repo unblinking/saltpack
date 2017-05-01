@@ -49,7 +49,7 @@ func (ds *decryptStream) getNextChunk() ([]byte, error) {
 		return nil, err
 	}
 
-	chunk, err := ds.processEncryptionBlock(ciphertext, authenticators, isFinal, seqno)
+	chunk, err := ds.processBlock(ciphertext, authenticators, isFinal, seqno)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (ds *decryptStream) getNextChunk() ([]byte, error) {
 func (ds *decryptStream) readHeader(rawReader io.Reader) error {
 	// Read the header bytes.
 	headerBytes := []byte{}
-	seqno, err := ds.mps.Read(&headerBytes)
+	_, err := ds.mps.Read(&headerBytes)
 	if err != nil {
 		return ErrFailedToReadHeaderBytes
 	}
@@ -81,8 +81,7 @@ func (ds *decryptStream) readHeader(rawReader io.Reader) error {
 	if err != nil {
 		return err
 	}
-	header.seqno = seqno
-	err = ds.processEncryptionHeader(&header)
+	err = ds.processHeader(&header)
 	if err != nil {
 		return err
 	}
@@ -179,7 +178,7 @@ func (ds *decryptStream) tryHiddenReceivers(hdr *EncryptionHeader, ephemeralKey 
 	return nil, nil, -1, nil
 }
 
-func (ds *decryptStream) processEncryptionHeader(hdr *EncryptionHeader) error {
+func (ds *decryptStream) processHeader(hdr *EncryptionHeader) error {
 	if err := hdr.validate(ds.versionValidator); err != nil {
 		return err
 	}
@@ -260,7 +259,7 @@ func computeMACKeyReceiver(version Version, index uint64, secret BoxSecretKey, p
 	}
 }
 
-func (ds *decryptStream) processEncryptionBlock(ciphertext []byte, authenticators []payloadAuthenticator, isFinal bool, seqno packetSeqno) ([]byte, error) {
+func (ds *decryptStream) processBlock(ciphertext []byte, authenticators []payloadAuthenticator, isFinal bool, seqno packetSeqno) ([]byte, error) {
 
 	blockNum := encryptionBlockNumber(seqno - 1)
 

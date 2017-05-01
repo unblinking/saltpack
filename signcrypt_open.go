@@ -54,7 +54,7 @@ func (sos *signcryptOpenStream) getNextChunk() ([]byte, error) {
 func (sos *signcryptOpenStream) readHeader() error {
 	// Read the header bytes.
 	headerBytes := []byte{}
-	seqno, err := sos.mps.Read(&headerBytes)
+	_, err := sos.mps.Read(&headerBytes)
 	if err != nil {
 		return ErrFailedToReadHeaderBytes
 	}
@@ -66,8 +66,7 @@ func (sos *signcryptOpenStream) readHeader() error {
 	if err != nil {
 		return err
 	}
-	header.seqno = seqno
-	err = sos.processSigncryptionHeader(&header)
+	err = sos.processHeader(&header)
 	if err != nil {
 		return err
 	}
@@ -152,7 +151,7 @@ func (sos *signcryptOpenStream) trySharedSymmetricKeys(hdr *SigncryptionHeader, 
 	return nil, nil
 }
 
-func (sos *signcryptOpenStream) processSigncryptionHeader(hdr *SigncryptionHeader) error {
+func (sos *signcryptOpenStream) processHeader(hdr *SigncryptionHeader) error {
 	if err := hdr.validate(); err != nil {
 		return err
 	}

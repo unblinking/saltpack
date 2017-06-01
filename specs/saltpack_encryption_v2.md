@@ -1,10 +1,4 @@
-**Note to implementers**: The [moderncrypto.org
-thread](https://moderncrypto.org/mail-archive/messaging/2016/thread.html#2070)
-on saltpack brought up an issue with our nonces, which weakens the anonymity of
-receivers. Fixing this requires backwards-incompatible changes, and will likely
-lead to a version 2 of this spec.
-
-# Saltpack Binary Encryption Format
+# Saltpack Binary Encryption Format [version 2]
 
 The main building block of our encrypted message format is NaCl's
 [box](http://nacl.cr.yp.to/box.html) and
@@ -43,8 +37,8 @@ without Charlie detecting the attack.
 
 The message is chunked into 1MB chunks. A sequential nonce used for the
 encryption and MAC's ensures that the 1MB chunks cannot be reordered. The end
-of the message is marked with an empty chunk — encrypted and MAC'ed the same
-way — to prevent truncation attacks.
+of the message is marked with an authenticated flag to prevent truncation
+attacks.
 
 Though the scheme is designed with the intent of having multiple per-device
 keys for each recipient, the implementation treats all recipient keys
@@ -63,8 +57,8 @@ at a later date, she simply adds her public keys to the list of recipients.
 ## Implementation
 
 An encrypted message is a series of concatenated MessagePack objects. The first
-is a header packet, followed by any number of non-empty payload packets, and
-finally an empty payload packet.
+is a header packet, followed by one or more payload packets, the last of which
+is indicated with a final packet flag.
 
 ### Header Packet
 The header packet is a MessagePack list with these contents:
@@ -82,9 +76,9 @@ The header packet is a MessagePack list with these contents:
 
 - The **format name** is the string "saltpack".
 - The **version** is a list of the major and minor versions, currently
-  `[1, 0]`.
+  `[2, 0]`.
 - The **mode** is the number 0, for encryption. (1 and 2 are attached and
-  detached signing.)
+  detached signing, and 3 is signcryption.)
 - The **ephemeral public key** is a NaCl public encryption key, 32 bytes. The
   ephemeral keypair is generated at random by the sender and only used for one
   message.
@@ -107,7 +101,7 @@ A recipient pair is a two-element list:
   encryption key. This field may be null, when the recipients are anonymous.
 - The **payload key box** is a [`crypto_box`](http://nacl.cr.yp.to/box.html)
   containing a copy of the **payload key**, encrypted with the recipient's
-  public key and the ephemeral private key.
+  public key, the ephemeral private key, and a counter nonce.
 
 #### Generating a Header Packet
 
@@ -123,10 +117,11 @@ header:
    secretbox**.
 4. For each recipient, encrypt the **payload key** using
    [`crypto_box`](http://nacl.cr.yp.to/box.html) with the recipient's public
-   key, the ephemeral private key, and the nonce
-   `saltpack_payload_key_box`. Pair these with the recipients' public keys,
-   or `null` for anonymous recipients, and collect the pairs into the
-   **recipients list**.
+   key, the ephemeral private key, and the nonce `saltpack_recipsbXXXXXXXX`.
+   `XXXXXXXX` is 8-byte big-endian unsigned recipient index, where the first
+   recipient is index zero. Pair these with the recipients' public keys, or
+   `null` for anonymous recipients, and collect the pairs into the **recipients
+   list**.
 5. Collect the **format name**, **version**, and **mode** into a list, followed
    by the **ephemeral public key**, the **sender secretbox**, and the nested
    **recipients list**.
@@ -136,26 +131,29 @@ header:
 8. Serialize the bytes from #6 *again* into a MessagePack `bin` object. These
    twice-encoded bytes are the header packet.
 
-    After generating the header, the sender computes the **MAC keys**, which
-    will be used below to authenticate the payload:
+    After generating the header, the sender computes each recipient's **MAC
+    key**, which will be used below to authenticate the payload:
 
-9. For each recipient, encrypt 32 zero bytes using
-   [`crypto_box`](http://nacl.cr.yp.to/box.html) with the recipient's public
-   key, the sender's long-term private key, and the first 24 bytes of the
-   **header hash** from #8 as a nonce. Take the last 32 bytes of each box.
-   These are the **MAC keys**.
+9. Concatenate the first 16 bytes of the **header hash** from step 7 above,
+   with the **recipient index** from step 4 above. This is the basis of each
+   recipient's MAC nonce.
+10. Clear the least significant bit of byte 15. That is: `nonce[15] &= 0xfe`.
+11. Encrypt 32 zero bytes using [`crypto_box`](http://nacl.cr.yp.to/box.html)
+    with the recipient's public key, the sender's long-term private key, and
+    the nonce from the previous step.
+12. Modify the nonce from step 10 by setting the least significant bit of byte
+    15. That is: `nonce[15] |= 0x01`.
+13. Encrypt 32 zero bytes again, as in step 11, but using the ephemeral private
+    key rather than the sender's long term private key.
+14. Concatenate the last 32 bytes each box from steps 11 and 13. Take the
+    SHA512 hash of that concatenation. The recipient's **MAC Key** is the first
+    32 bytes of that hash.
 
 Encrypting the sender's long-term public key in step #3 allows Alice to stay
 anonymous to Mallory. If Alice wants to be anonymous to Bob as well, she can
 reuse the ephemeral keypair as her own in steps #3 and #9. When the ephemeral
 key and the sender key are the same, clients may indicate that a message is
 "intentionally anonymous" as opposed to "from an unknown sender".
-
-Using the same nonce for each **payload key box** might raise a concern: Are we
-violating the rule against nonce reuse, if for example the recipients list
-happens to contain the same recipient twice? No, because each of these boxes
-holds the same plaintext, reusing a key and a nonce will produce exactly the
-same ciphertext twice.
 
 #### Parsing a Header Packet
 
@@ -174,17 +172,13 @@ Recipients parse the header of a message using the following steps:
    public key** and the recipient's private key.
 6. Try to open each of the **payload key boxes** in the recipients list using
    [`crypto_box_open_afternm`](http://nacl.cr.yp.to/box.html), the precomputed
-   secret from #5, and the nonce `saltpack_payload_key_box`. Successfully
-   opening one gives the **payload key**, and the index of the box that worked
-   is the **recipient index**.
+   secret from #5, and the nonce `saltpack_recipsbXXXXXXXX`. `XXXXXXXX` is
+   8-byte big-endian unsigned **recipient index**, where the first recipient is
+   index 0. Successfully opening one gives the **payload key**.
 7. Open the **sender secretbox** using
    [`crypto_secretbox_open`](http://nacl.cr.yp.to/secretbox.html) with the
-   **payload key** from #6 and the nonce `saltpack_sender_key_sbox`
-8. Compute the recipient's **MAC key** by encrypting 32 zero bytes using
-   [`crypto_box`](http://nacl.cr.yp.to/box.html) with the recipient's private
-   key, the sender's public key from #7, and the first 24 bytes of the **header
-   hash** from #2 as a nonce. The **MAC key** is the last 32 bytes of the
-   resulting box.
+   **payload key** from #6 and the nonce `saltpack_sender_key_sbox`.
+8. Compute the recipient's **MAC key** as in steps 9-14 above.
 
 If the recipient's public key is shown in the **recipients list** (that is, if
 the recipient is not anonymous), clients may skip all the other **payload key
@@ -207,6 +201,7 @@ A payload packet is a MessagePack list with these contents:
 [
     authenticators list,
     payload secretbox,
+    final flag,
 ]
 ```
 
@@ -218,6 +213,8 @@ A payload packet is a MessagePack list with these contents:
   plaintext bytes, max size 1 MB. It's encrypted with the **payload key**. The
   nonce is `saltpack_ploadsbNNNNNNNN` where `NNNNNNNN` is the packet number as
   an 8-byte big-endian unsigned integer. The first payload packet is number 0.
+- The **final flag** is a boolean, true for the final payload packet, and false
+  for all other payload packets.
 
 Computing the **MAC keys** is the only step of encrypting a message that
 requires the sender's private key. Thus it's the **authenticators list**,
@@ -228,7 +225,8 @@ attacker from modifying the format version or any other header fields.
 We compute the authenticators in three steps:
 
 1. Concatenate the **header hash**, the nonce for the **payload secretbox**,
-   and the **payload secretbox** itself.
+   the **final flag** byte (0x00 or 0x01), and the **payload secretbox**
+   itself.
 2. Compute the [`crypto_hash`](http://nacl.cr.yp.to/hash.html) (SHA512) of the
    bytes from #1.
 3. For each recipient, compute the
@@ -244,10 +242,8 @@ authenticator by repeating steps #1 and #2 and then calling
 Unlike the twice-encoded header above, payload packets are once-encoded
 directly to the output stream.
 
-After encrypting the entire message, the sender adds an extra payload packet
-with an empty payload to signify the end. If a message doesn't end with an
-empty payload packet, the receiving client should report an error that the
-message has been truncated.
+If a message ends with without setting the **final flag** to true, the
+receiving client must report an error that the message has been truncated.
 
 The authenticators cover the SHA512 of the payload, rather than the payload
 itself, to save time when a large message has many recipients. This assumes the
@@ -271,7 +267,7 @@ constructions.
   # format name
   "saltpack",
   # major and minor version
-  [1, 0],
+  [2, 0],
   # mode (0 = encryption)
   0,
   # ephemeral public key
@@ -301,17 +297,7 @@ constructions.
   ],
   # payload secretbox
   f991dbe030e2cfa00a640376f956c68b2d113ec6384441a1834e455acbb046ead9389826e92cb7f91cc7ab30c3d4d38ef5e84d12617f37,
-]
-
-# empty payload packet
-[
-  # authenticators list
-  [
-    # the first recipient's authenticator
-    0bd743eb8b9c48ba1888d265cd90dedcc3d56b0a003ef99763af224c1a6501db,
-    # subsequent authenticators...
-  ],
-  # the empty payload secretbox
-  481ef99b4f0d0f918edd82e9f5619a41,
+  # final flag
+  True,
 ]
 ```

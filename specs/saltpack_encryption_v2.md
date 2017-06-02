@@ -1,3 +1,6 @@
+The [previous version of this spec](saltpack_encryption_v1.md) is available for
+applications that need backwards compatibility.
+
 # Saltpack Binary Encryption Format [version 2]
 
 The main building block of our encrypted message format is NaCl's

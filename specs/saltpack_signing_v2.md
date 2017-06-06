@@ -1,10 +1,7 @@
-The [previous version of this spec](saltpack_signing_v1.md) is available for
-applications that need backwards compatibility.
-
 # Saltpack Binary Signing Format [version 2]
 
-As with the [encryption format](saltpack_encryption_v2.md), we want our signing
-format to have some properties on top of a standard NaCl signature:
+As with the encryption format, we want our signing format to have some
+properties on top of a standard NaCl signature:
 - Streaming. We want to be able to verify a message of any size, without
   fitting the whole thing in RAM, and without requiring a second pass to output
   attached plaintext. But we should only ever output verified data.
@@ -18,10 +15,10 @@ format to have some properties on top of a standard NaCl signature:
 ## Design
 
 We define two signing formats: one attached and one detached. The attached
-format will have a header packet and payload packets similar to the [encryption
-format](saltpack_encryption_v2.md), with a final packet flag at the end of the
-message, and an incrementing counter to prevent reordering. The detached format
-will contain just a header packet, with no payload.
+format will have a header packet and payload packets similar to the encryption
+format, with a final packet flag at the end of the message, and an incrementing
+counter to prevent reordering. The detached format will contain just a header
+packet, with no payload.
 
 Both formats will hash a random nonce along with the plaintext, and then sign
 the resulting hash. This nonce serves two purposes. First, in the attached
@@ -52,9 +49,9 @@ header packet is a MessagePack array that looks like this:
 - **sender public key** is the sender's long-term NaCl signing public key, 32 bytes.
 - **nonce** is 32 random bytes.
 
-As in the [encryption spec](saltpack_encryption_v2.md), the header packet is
-serialized into a MessagePack `array` object, hashed with SHA512 to produce the
-**header hash**, and then serialized *again* into a MessagePack `bin` object.
+As in the encryption spec, the header packet is serialized into a MessagePack
+`array` object, hashed with SHA512 to produce the **header hash**, and then
+serialized *again* into a MessagePack `bin` object.
 
 Payload packets are MessagePack arrays that look like this:
 
@@ -83,10 +80,10 @@ The sender then signs the concatenation of two values:
 - `"saltpack attached signature\0"`
 - the SHA512 hash above
 
-As in the [encryption spec](saltpack_encryption_v2.md), the sender must verify
-that the last packet received sets the final packet flag. If the last packet of
-a message doesn't set the flag, the receiving client must report an error that
-the message has been truncated.
+As in the encryption spec, the sender must verify that the last packet received
+sets the final packet flag. If the last packet of a message doesn't set the
+flag, the receiving client must report an error that the message has been
+truncated.
 
 ## Detached Implementation
 

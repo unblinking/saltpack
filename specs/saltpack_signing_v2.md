@@ -30,7 +30,9 @@ attacker could predict in advance.
 
 An attached signature is a header packet, followed by any number of non-empty
 payload packets, followed by an empty payload packet. An attached signing
-header packet is a MessagePack array that looks like this:
+header packet is a [MessagePack
+array](https://github.com/msgpack/msgpack/blob/master/spec.md) that looks like
+this:
 
 ```
 [

@@ -56,9 +56,10 @@ at a later date, she simply adds her public keys to the list of recipients.
 
 ## Implementation
 
-An encrypted message is a series of concatenated MessagePack objects. The first
-is a header packet, followed by one or more payload packets, the last of which
-is indicated with a final packet flag.
+An encrypted message is a series of concatenated [MessagePack
+objects](https://github.com/msgpack/msgpack/blob/master/spec.md). The first is
+a header packet, followed by one or more payload packets, the last of which is
+indicated with a final packet flag.
 
 ### Header Packet
 The header packet is a MessagePack list with these contents:

@@ -200,12 +200,14 @@ A payload packet is a MessagePack list with these contents:
 
 ```
 [
+    final flag,
     authenticators list,
     payload secretbox,
-    final flag,
 ]
 ```
 
+- The **final flag** is a boolean, true for the final payload packet, and false
+  for all other payload packets.
 - The **authenticators list** contains 32-byte HMAC tags, one for each
   recipient, which authenticate the **payload secretbox** together with the
   message header. These are computed with the **MAC keys** derived from the
@@ -214,8 +216,6 @@ A payload packet is a MessagePack list with these contents:
   plaintext bytes, max size 1 MB. It's encrypted with the **payload key**. The
   nonce is `saltpack_ploadsbNNNNNNNN` where `NNNNNNNN` is the packet number as
   an 8-byte big-endian unsigned integer. The first payload packet is number 0.
-- The **final flag** is a boolean, true for the final payload packet, and false
-  for all other payload packets.
 
 Computing the **MAC keys** is the only step of encrypting a message that
 requires the sender's private key. Thus it's the **authenticators list**,

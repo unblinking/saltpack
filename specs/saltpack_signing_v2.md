@@ -59,16 +59,16 @@ Payload packets are MessagePack arrays that look like this:
 
 ```
 [
+    final flag,
     signature,
     payload chunk,
-    final flag,
 ]
 ```
 
-- **signature** is a detached NaCl signature, 64 bytes.
-- **payload chunk** is a chunk of the plaintext bytes, max size 1 MB.
 - **final flag** is a boolean, true for the final payload packet, and false for
   all other payload packets.
+- **signature** is a detached NaCl signature, 64 bytes.
+- **payload chunk** is a chunk of the plaintext bytes, max size 1 MB.
 
 To make each signature, the sender first takes the SHA512 hash of the
 concatenation of four values:

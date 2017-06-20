@@ -120,9 +120,9 @@ header:
    For Curve25519 recipient public keys, first derive a shared symmetric key by
    boxing 32 zero bytes with the recipient public key, the ephemeral private
    key, and the nonce `saltpack_derived_sboxkey`, and taking the last 32 bytes
-   of the resulting box. Seal the **payload key** using this derived symmetric
-   key, with the nonce `saltpack_recipsbXXXXXXXX`, where `XXXXXXXX` is the
-   8-byte big-endian unsigned recipient index. To compute the recipient
+   of the resulting box. Secretbox the **payload key** using this derived
+   symmetric key, with the nonce `saltpack_recipsbXXXXXXXX`, where `XXXXXXXX`
+   is the 8-byte big-endian unsigned recipient index. To compute the recipient
    identifier, concatenate the derived symmetric key and the
    `saltpack_recipsbXXXXXXXX` nonce together, and HMAC-SHA512 them under the
    key `saltpack signcryption box key identifier`. The identifier is the first
@@ -131,9 +131,9 @@ header:
    For recipient symmetric keys, first derive a shared symmetric key.
    Concatenate the ephemeral public Curve25519 key and the recipient symmetric
    key, and HMAC-SHA512 them under the key `saltpack signcryption derived
-   symmetric key`. The derived key is the first 32 bytes of that HMAC. Seal the
-   **payload key** using this derived symmetric key, with the nonce
-   `saltpack_recipsbXXXXXXXX`, where `XXXXXXXX` is the 8-byte big-endian
+   symmetric key`. The derived key is the first 32 bytes of that HMAC.
+   Secretbox the **payload key** using this derived symmetric key, with the
+   nonce `saltpack_recipsbXXXXXXXX`, where `XXXXXXXX` is the 8-byte big-endian
    unsigned recipient index. The recipient identifier in this case is up to the
    application.
 

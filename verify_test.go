@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,35 +20,22 @@ func TestVerifyVersionValidator(t *testing.T) {
 	in := []byte{0x01}
 	key := newSigPrivKey(t)
 	smg, err := Sign(Version1(), in, key)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	_, _, err = Verify(SingleVersionValidator(Version2()), smg, kr)
-	if err == nil {
-		t.Fatal("Unexpected nil error")
-	}
+	require.NotNil(t, err)
 }
 
 func testVerify(t *testing.T, version Version) {
 	in := randomMsg(t, 128)
 	key := newSigPrivKey(t)
 	smsg, err := Sign(version, in, key)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	skey, msg, err := Verify(SingleVersionValidator(version), smsg, kr)
-	if err != nil {
-		t.Logf("input:      %x", in)
-		t.Logf("signed msg: %x", smsg)
-		t.Fatal(err)
-	}
-	if !PublicKeyEqual(skey, key.GetPublicKey()) {
-		t.Errorf("sender key %x, expected %x", skey.ToKID(), key.GetPublicKey().ToKID())
-	}
-	if !bytes.Equal(msg, in) {
-		t.Errorf("verified msg '%x', expected '%x'", msg, in)
-	}
+	require.NoError(t, err, "input:      %x\nsigned msg: %x", in, smsg)
+	assert.True(t, PublicKeyEqual(skey, key.GetPublicKey()),
+		"sender key %x, expected %x", skey.ToKID(), key.GetPublicKey().ToKID())
+	assert.Equal(t, in, msg)
 }
 
 func testVerifyNewMinorVersion(t *testing.T, version Version) {
@@ -63,23 +51,17 @@ func testVerifyNewMinorVersion(t *testing.T, version Version) {
 	}
 	key := newSigPrivKey(t)
 	smg, err := testTweakSign(version, in, key, tso)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	_, _, err = Verify(SingleVersionValidator(newVersion), smg, kr)
-	if err != nil {
-		t.Fatalf("Unepected error %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func testVerifyConcurrent(t *testing.T, version Version) {
 	in := randomMsg(t, 128)
 	key := newSigPrivKey(t)
 	smsg, err := Sign(version, in, key)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
@@ -87,19 +69,13 @@ func testVerifyConcurrent(t *testing.T, version Version) {
 		go func() {
 			defer wg.Done()
 			skey, msg, err := Verify(SingleVersionValidator(version), smsg, kr)
-			if err != nil {
-				t.Logf("input:      %x", in)
-				t.Logf("signed msg: %x", smsg)
-				t.Error(err)
+			if !assert.NoError(t, err, "input:      %x\nsigned msg: %x", in, smsg) {
 				// Don't fall through, as the tests below will panic.
 				return
 			}
-			if !PublicKeyEqual(skey, key.GetPublicKey()) {
-				t.Errorf("sender key %x, expected %x", skey.ToKID(), key.GetPublicKey().ToKID())
-			}
-			if !bytes.Equal(msg, in) {
-				t.Errorf("verified msg '%x', expected '%x'", msg, in)
-			}
+			assert.True(t, PublicKeyEqual(skey, key.GetPublicKey()),
+				"sender key %x, expected %x", skey.ToKID(), key.GetPublicKey().ToKID())
+			assert.Equal(t, in, msg)
 		}()
 	}
 	wg.Wait()
@@ -113,62 +89,40 @@ func testVerifyEmptyKeyring(t *testing.T, version Version) {
 	in := randomMsg(t, 128)
 	key := newSigPrivKey(t)
 	smsg, err := Sign(version, in, key)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	_, _, err = Verify(SingleVersionValidator(version), smsg, emptySigKeyring{})
-	if err == nil {
-		t.Fatal("Verify worked with empty keyring")
-	}
-	if err != ErrNoSenderKey {
-		t.Errorf("error: %v, expected ErrNoSenderKey", err)
-	}
+	require.Equal(t, ErrNoSenderKey, err)
 }
 
 func testVerifyDetachedEmptyKeyring(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
 	msg := randomMsg(t, 128)
 	sig, err := SignDetached(version, msg, key)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	_, err = VerifyDetached(SingleVersionValidator(version), msg, sig, emptySigKeyring{})
-	if err == nil {
-		t.Fatal("VerifyDetached worked with empty keyring")
-	}
-	if err != ErrNoSenderKey {
-		t.Errorf("error: %v, expected ErrNoSenderKey", err)
-	}
+	require.Equal(t, ErrNoSenderKey, err)
 }
 
 func testVerifyErrorAtEOF(t *testing.T, version Version) {
 	in := randomMsg(t, 128)
 	key := newSigPrivKey(t)
 	smsg, err := Sign(version, in, key)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	var reader io.Reader = bytes.NewReader(smsg)
 	errAtEOF := errors.New("err at EOF")
 	reader = errAtEOFReader{reader, errAtEOF}
 	_, stream, err := NewVerifyStream(SingleVersionValidator(version), reader, kr)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	msg, err := ioutil.ReadAll(stream)
-	if err != errAtEOF {
-		t.Fatalf("err=%v != errAtEOF=%v", err, errAtEOF)
-	}
+	requireErrSuffix(t, err, errAtEOF.Error())
 
 	// Since the bytes are still verified, the verified message
 	// should still compare equal to the original input.
-	if !bytes.Equal(msg, in) {
-		t.Errorf("verified msg '%x', expected '%x'", msg, in)
-	}
+	assert.Equal(t, in, msg)
 }
 
 func TestVerify(t *testing.T) {

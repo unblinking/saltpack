@@ -27,9 +27,8 @@ func msg(sz int) []byte {
 const ourBrand = "ACME"
 
 func brandCheck(t *testing.T, received string) {
-	if received != ourBrand {
-		t.Fatalf("brand mismatch; wanted %q but got %q", ourBrand, received)
-	}
+	t.Helper()
+	require.Equal(t, ourBrand, received)
 }
 
 const hdr = "BEGIN ACME SALTPACK ENCRYPTED MESSAGE"
@@ -37,23 +36,13 @@ const ftr = "END ACME SALTPACK ENCRYPTED MESSAGE"
 
 func testArmor(t *testing.T, sz int) {
 	m := msg(sz)
-	a, e := Armor62Seal(m, MessageTypeEncryption, ourBrand)
-	if e != nil {
-		t.Fatal(e)
-	}
+	a, err := Armor62Seal(m, MessageTypeEncryption, ourBrand)
+	require.NoError(t, err)
 	m2, hdr2, ftr2, err := Armor62Open(a)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(m, m2) {
-		t.Errorf("Buffers disagreed: %v != %v (%d v %d)", m, m2, len(m), len(m2))
-	}
-	if hdr != hdr2 {
-		t.Errorf("headers disagreed: %s != %s", hdr, hdr2)
-	}
-	if ftr != ftr2 {
-		t.Errorf("headers disagreed: %s != %s", ftr, ftr2)
-	}
+	require.NoError(t, err)
+	require.Equal(t, m, m2)
+	require.Equal(t, hdr, hdr2)
+	require.Equal(t, ftr, ftr2)
 }
 
 func TestArmor128(t *testing.T) {
@@ -79,30 +68,18 @@ func TestSlowWriter(t *testing.T) {
 	m := msg(1024 * 16)
 	var out bytes.Buffer
 	enc, err := NewArmor62EncoderStream(&out, MessageTypeEncryption, ourBrand)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, c := range m {
-		if _, err = enc.Write([]byte{c}); err != nil {
-			t.Fatal(err)
-		}
+		_, err = enc.Write([]byte{c})
+		require.NoError(t, err)
 	}
-	if err = enc.Close(); err != nil {
-		t.Fatal(err)
-	}
+	err = enc.Close()
+	require.NoError(t, err)
 	m2, hdr2, ftr2, err := Armor62Open(out.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(m, m2) {
-		t.Fatal("Buffer mismatch")
-	}
-	if ftr != ftr2 {
-		t.Fatal("footer mismatch")
-	}
-	if hdr != hdr2 {
-		t.Fatal("header mismatch")
-	}
+	require.NoError(t, err)
+	require.Equal(t, m, m2)
+	require.Equal(t, hdr, hdr2)
+	require.Equal(t, ftr, ftr2)
 }
 
 type slowReader struct {
@@ -122,42 +99,24 @@ func TestSlowReader(t *testing.T) {
 	var sr slowReader
 	m := msg(1024 * 32)
 	a, err := Armor62Seal(m, MessageTypeEncryption, ourBrand)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	sr.buf = []byte(a)
 	dec, frame, err := NewArmor62DecoderStream(&sr)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	m2, err := ioutil.ReadAll(dec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(m, m2) {
-		t.Fatalf("buffer mismatch")
-	}
+	require.NoError(t, err)
+	require.Equal(t, m, m2)
 	hdr2, err := frame.GetHeader()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if hdr != hdr2 {
-		t.Fatalf("header mismatch: %s != %s", hdr, hdr2)
-	}
+	require.NoError(t, err)
+	require.Equal(t, hdr, hdr2)
 	ftr2, err := frame.GetFooter()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ftr != ftr2 {
-		t.Fatalf("footer mismatch: %s != %s", ftr, ftr2)
-	}
+	require.NoError(t, err)
+	require.Equal(t, ftr, ftr2)
 }
 
 func TestBinaryInput(t *testing.T) {
 	in, err := hex.DecodeString("96a873616c747061636b92010002c420c4afc00d50af5072094609199b54a5f8cf7b03bcea3d4945b2bbd50ac1cd42ecc41014bf77454c0b028cb009d06019981a75c4401a451af65fa3b40ae2be73b5c17dc2657992337c98ad75d4fe21de37fba2329b4970defbea176c98d306d0d285ffaa515b630224836b2c55ba1b6ba026a62102")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	done := make(chan bool)
 	var m []byte

@@ -57,7 +57,7 @@ a header packet, followed by one or more payload packets, the last of which is
 indicated with a final packet flag.
 
 ### Header Packet
-The header packet is a MessagePack list with these contents:
+The header packet is a MessagePack array with these contents:
 
 ```
 [
@@ -83,7 +83,11 @@ The header packet is a MessagePack list with these contents:
   sender's long-term public _signing_ key, encrypted with the **payload key**
   from below.
 - The **recipients list** contains a recipient pair for each recipient key,
-  including an encrypted copy of the **payload key**. See below.
+  including an encrypted copy of the **payload key** (see
+  below). Note that a MessagePack array can hold at most
+  [at most 2³² &minus; 1](https://github.com/msgpack/msgpack/blob/master/spec.md#array-format-family)
+  elements, so therefore an encrypted message can have at most 2³² &minus; 1
+  recipients.
 
 A recipient pair is a two-element list:
 
@@ -186,7 +190,7 @@ should allow the extra fields and ignore them. That allows us to make future
 additions to the format without breaking backward compatibility.
 
 ### Payload Packets
-A payload packet is a MessagePack list with these contents:
+A payload packet is a MessagePack array with these contents:
 
 ```
 [

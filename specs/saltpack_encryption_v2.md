@@ -62,7 +62,7 @@ a header packet, followed by one or more payload packets, the last of which is
 indicated with a final packet flag.
 
 ### Header Packet
-The header packet is a MessagePack list with these contents:
+The header packet is a MessagePack array with these contents:
 
 ```
 [
@@ -87,7 +87,11 @@ The header packet is a MessagePack list with these contents:
   [`crypto_secretbox`](http://nacl.cr.yp.to/secretbox.html) containing the
   sender's long-term public key, encrypted with the **payload key** from below.
 - The **recipients list** contains a recipient pair for each recipient key,
-  including an encrypted copy of the **payload key**. See below.
+  including an encrypted copy of the **payload key** (see
+  below). Note that a MessagePack array can hold at most
+  [at most 2³² &minus; 1](https://github.com/msgpack/msgpack/blob/master/spec.md#array-format-family)
+  elements, so therefore an encrypted message can have at most 2³² &minus; 1
+  recipients.
 
 A recipient pair is a two-element list:
 
@@ -196,7 +200,7 @@ will never open a box that [wasn't intended for
 saltpack](https://sandstorm.io/news/2015-05-01-is-that-ascii-or-protobuf#the-obvious-problem).
 
 ### Payload Packets
-A payload packet is a MessagePack list with these contents:
+A payload packet is a MessagePack array with these contents:
 
 ```
 [

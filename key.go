@@ -5,6 +5,7 @@ package saltpack
 
 import (
 	"crypto/hmac"
+	cryptorand "crypto/rand"
 )
 
 // RawBoxKey is the raw byte-representation of what a box key should
@@ -24,6 +25,18 @@ func rawBoxKeyFromSlice(slice []byte) (*RawBoxKey, error) {
 // buffer. Used for NaCl SecretBox.
 type SymmetricKey [32]byte
 
+func newRandomSymmetricKey() (*SymmetricKey, error) {
+	var s SymmetricKey
+	n, err := cryptorand.Read(s[:])
+	if err != nil {
+		return nil, err
+	}
+	if n != len(s) {
+		return nil, ErrInsufficientRandomness
+	}
+	return &s, nil
+}
+
 func symmetricKeyFromSlice(slice []byte) (*SymmetricKey, error) {
 	var result SymmetricKey
 	if len(slice) != len(result) {
@@ -31,6 +44,13 @@ func symmetricKeyFromSlice(slice []byte) (*SymmetricKey, error) {
 	}
 	result = sliceToByte32(slice)
 	return &result, nil
+}
+
+// EphemeralKeyCreator is an interface for objects that can create
+// random ephemeral keys.
+type EphemeralKeyCreator interface {
+	// CreateEmphemeralKey creates a random ephemeral key.
+	CreateEphemeralKey() (BoxSecretKey, error)
 }
 
 // BasePublicKey types can output a key ID corresponding to the key.
@@ -44,15 +64,12 @@ type BasePublicKey interface {
 // BoxPublicKey is an generic interface to NaCl's public key Box function.
 type BoxPublicKey interface {
 	BasePublicKey
+	// Implement EphemeralKeyCreator to avoid breaking the public API.
+	EphemeralKeyCreator
 
 	// ToRawBoxKeyPointer returns this public key as a *[32]byte,
 	// for use with nacl.box.Seal
 	ToRawBoxKeyPointer() *RawBoxKey
-
-	// CreateEmphemeralKey creates an ephemeral key of the same type, but
-	// totally random. The BoxPublicKey and the Keyring interfaces both support
-	// this method, for convenience.
-	CreateEphemeralKey() (BoxSecretKey, error)
 
 	// HideIdentity returns true if we should hide the identity of this
 	// key in our output message format.
@@ -106,6 +123,9 @@ type SigningPublicKey interface {
 // recover public or private keys during the decryption process.
 // Calls can block on network action.
 type Keyring interface {
+	// Implement EphemeralKeyCreator to avoid breaking the public API.
+	EphemeralKeyCreator
+
 	// LookupBoxSecretKey looks in the Keyring for the secret key corresponding
 	// to one of the given Key IDs.  Returns the index and the key on success,
 	// or -1 and nil on failure.
@@ -123,11 +143,6 @@ type Keyring interface {
 	// BoxPublicKey format. This key has never been seen before, so
 	// will be ephemeral.
 	ImportBoxEphemeralKey(kid []byte) BoxPublicKey
-
-	// CreateEmphemeralKey creates a random ephemeral key. It is not added to
-	// the keyring. The BoxPublicKey and Keyring interfaces both support this
-	// method, for convenience.
-	CreateEphemeralKey() (BoxSecretKey, error)
 }
 
 // SigKeyring is an interface used during verification to find

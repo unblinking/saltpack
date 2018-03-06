@@ -16,6 +16,11 @@ import (
 	"golang.org/x/crypto/poly1305"
 )
 
+// maxReceiverCount is the maximum number of receivers allowed
+// for a single encrypted saltpack message, which is the maximum length
+// of a msgpack array.
+const maxReceiverCount = (1 << 32) - 1
+
 // encryptionBlockNumber describes which block number we're at in the sequence
 // of encrypted blocks. Each encrypted block of course fits into a packet.
 type encryptionBlockNumber uint64
@@ -24,18 +29,6 @@ func codecHandle() *codec.MsgpackHandle {
 	var mh codec.MsgpackHandle
 	mh.WriteExt = true
 	return &mh
-}
-
-func randomFill(b []byte) (err error) {
-	l := len(b)
-	n, err := cryptorand.Read(b)
-	if err != nil {
-		return err
-	}
-	if n != l {
-		return ErrInsufficientRandomness
-	}
-	return nil
 }
 
 type cryptoSource struct{}
@@ -54,6 +47,8 @@ func (s cryptoSource) Seed(seed int64) {
 	panic("cryptoSource.Seed() called unexpectedly")
 }
 
+// TODO: Use go 1.10's random.Shuffle instead, which removes a source
+// of bias.
 func randomPerm(n int) []int {
 	rnd := mathrand.New(cryptoSource{})
 	return rnd.Perm(n)

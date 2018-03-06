@@ -18,7 +18,14 @@ import (
 	"golang.org/x/crypto/nacl/box"
 )
 
+type ephemeralKeyCreator struct{}
+
+func (c ephemeralKeyCreator) CreateEphemeralKey() (BoxSecretKey, error) {
+	return createEphemeralKey(false)
+}
+
 type boxPublicKey struct {
+	ephemeralKeyCreator
 	key  RawBoxKey
 	hide bool
 }
@@ -31,6 +38,7 @@ type boxSecretKey struct {
 }
 
 type keyring struct {
+	ephemeralKeyCreator
 	keys      map[string]BoxSecretKey
 	sigKeys   map[string]SigningSecretKey
 	blacklist map[string]struct{}
@@ -88,7 +96,7 @@ func (r *keyring) GetAllBoxSecretKeys() (ret []BoxSecretKey) {
 	return ret
 }
 
-func (r *keyring) CreateEphemeralKey() (BoxSecretKey, error) {
+func createEphemeralKey(hide bool) (BoxSecretKey, error) {
 	pk, sk, err := box.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
@@ -97,6 +105,7 @@ func (r *keyring) CreateEphemeralKey() (BoxSecretKey, error) {
 	ret.key = *sk
 	ret.pub.key = *pk
 	ret.isInit = true
+	ret.hide = hide
 	return ret, nil
 }
 
@@ -176,22 +185,10 @@ func (b boxSecretKey) Unbox(sender BoxPublicKey, nonce Nonce, msg []byte) ([]byt
 
 var kr = newKeyring()
 
-func (b boxPublicKey) CreateEphemeralKey() (BoxSecretKey, error) {
-	pk, sk, err := box.GenerateKey(rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-	ret := &boxSecretKey{hide: b.hide}
-	ret.key = *sk
-	ret.pub.key = *pk
-	ret.isInit = true
-	return ret, nil
-}
-
 func (b boxSecretKey) IsNull() bool { return !b.isInit }
 
 func newHiddenBoxKeyNoInsert(t *testing.T) BoxSecretKey {
-	ret, err := (boxPublicKey{hide: true}).CreateEphemeralKey()
+	ret, err := createEphemeralKey(true)
 	require.NoError(t, err)
 	return ret
 }
@@ -203,7 +200,7 @@ func newHiddenBoxKey(t *testing.T) BoxSecretKey {
 }
 
 func newBoxKeyNoInsert(t *testing.T) BoxSecretKey {
-	ret, err := (boxPublicKey{}).CreateEphemeralKey()
+	ret, err := createEphemeralKey(false)
 	require.NoError(t, err)
 	return ret
 }
@@ -339,7 +336,7 @@ func testRoundTrip(t *testing.T, version Version, msg []byte, receivers []BoxPub
 	if receivers == nil {
 		receivers = []BoxPublicKey{newBoxKey(t).GetPublicKey()}
 	}
-	strm, err := newTestEncryptStream(version, &ciphertext, sndr, receivers,
+	strm, err := newTestEncryptStream(version, &ciphertext, sndr, receivers, ephemeralKeyCreator{},
 		testEncryptionOptions{blockSize: 1024})
 	require.NoError(t, err)
 	_, err = strm.Write(msg)
@@ -459,7 +456,7 @@ func testReceiverNotFound(t *testing.T, version Version) {
 		newBoxKeyNoInsert(t).GetPublicKey(),
 	}
 
-	strm, err := newTestEncryptStream(version, &out, sndr, receivers,
+	strm, err := newTestEncryptStream(version, &out, sndr, receivers, ephemeralKeyCreator{},
 		testEncryptionOptions{blockSize: 1024})
 	require.NoError(t, err)
 	_, err = strm.Write(msg)
@@ -475,7 +472,7 @@ func testTruncation(t *testing.T, version Version) {
 	var out bytes.Buffer
 	msg := []byte("this message is going to be truncated")
 	receivers := []BoxPublicKey{newBoxKey(t).GetPublicKey()}
-	strm, err := newTestEncryptStream(version, &out, sndr, receivers,
+	strm, err := newTestEncryptStream(version, &out, sndr, receivers, ephemeralKeyCreator{},
 		testEncryptionOptions{blockSize: 1024})
 	require.NoError(t, err)
 	_, err = strm.Write(msg)

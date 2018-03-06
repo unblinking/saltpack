@@ -119,9 +119,20 @@ func (pes *testEncryptStream) encryptBlock(isFinal bool) error {
 	return nil
 }
 
-func (pes *testEncryptStream) init(version Version, sender BoxSecretKey, receivers []BoxPublicKey) error {
+func (pes *testEncryptStream) init(
+	version Version, sender BoxSecretKey, receivers []BoxPublicKey,
+	ephemeralKeyCreator EphemeralKeyCreator, rng encryptRNG) error {
+	if err := checkKnownVersion(version); err != nil {
+		return err
+	}
 
-	ephemeralKey, err := receivers[0].CreateEphemeralKey()
+	if err := checkEncryptReceivers(receivers); err != nil {
+		return err
+	}
+
+	receivers = rng.shuffleReceivers(receivers)
+
+	ephemeralKey, err := ephemeralKeyCreator.CreateEphemeralKey()
 	if err != nil {
 		return err
 	}
@@ -139,9 +150,11 @@ func (pes *testEncryptStream) init(version Version, sender BoxSecretKey, receive
 		Ephemeral:  ephemeralKey.GetPublicKey().ToKID(),
 		Receivers:  make([]receiverKeys, 0, len(receivers)),
 	}
-	if err := randomFill(pes.payloadKey[:]); err != nil {
+	payloadKey, err := rng.createSymmetricKey()
+	if err != nil {
 		return err
 	}
+	pes.payloadKey = *payloadKey
 
 	senderPlaintext := sliceToByte32(sender.GetPublicKey().ToKID())
 	senderPlaintextSlice := senderPlaintext[:]
@@ -257,22 +270,34 @@ func (pes *testEncryptStream) Close() error {
 	}
 }
 
+// noShuffleRNG implements encryptRNG to not shuffle. All of the tests
+// above no shuffling.
+type noShuffleRNG struct{}
+
+func (noShuffleRNG) createSymmetricKey() (*SymmetricKey, error) {
+	return newRandomSymmetricKey()
+}
+
+func (noShuffleRNG) shuffleReceivers(receivers []BoxPublicKey) []BoxPublicKey {
+	return receivers
+}
+
 // Options are available mainly for testing.  Can't think of a good reason for
 // end-users to have to specify options.
-func newTestEncryptStream(version Version, ciphertext io.Writer, sender BoxSecretKey, receivers []BoxPublicKey, options testEncryptionOptions) (io.WriteCloser, error) {
+func newTestEncryptStream(version Version, ciphertext io.Writer, sender BoxSecretKey, receivers []BoxPublicKey, ephemeralKeyCreator EphemeralKeyCreator, options testEncryptionOptions) (io.WriteCloser, error) {
 	pes := &testEncryptStream{
 		version: version,
 		output:  ciphertext,
 		encoder: newEncoder(ciphertext),
 		options: options,
 	}
-	err := pes.init(version, sender, receivers)
+	err := pes.init(version, sender, receivers, ephemeralKeyCreator, noShuffleRNG{})
 	return pes, err
 }
 
 func testSeal(version Version, plaintext []byte, sender BoxSecretKey, receivers []BoxPublicKey, options testEncryptionOptions) (out []byte, err error) {
 	var buf bytes.Buffer
-	es, err := newTestEncryptStream(version, &buf, sender, receivers, options)
+	es, err := newTestEncryptStream(version, &buf, sender, receivers, ephemeralKeyCreator{}, options)
 	if err != nil {
 		return nil, err
 	}

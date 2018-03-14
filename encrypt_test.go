@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/nacl/box"
 )
 
@@ -244,13 +245,8 @@ func slowRead(r io.Reader, sz int) ([]byte, error) {
 	return res, nil
 }
 
-func isValidNonTrivialPermutation(n int, a []int) bool {
+func isValidPermutation(n int, a []int) bool {
 	if len(a) != n {
-		return false
-	}
-	// Technically this check is flaky, but the flake probability
-	// is 1/n!, which is very small for n ~ 20.
-	if sort.IntsAreSorted(a) {
 		return false
 	}
 
@@ -261,6 +257,20 @@ func isValidNonTrivialPermutation(n int, a []int) bool {
 		if aCopy[i] != i {
 			return false
 		}
+	}
+
+	return true
+}
+
+func isValidNonTrivialPermutation(n int, a []int) bool {
+	if !isValidPermutation(n, a) {
+		return false
+	}
+
+	// Technically this check is flaky, but the flake probability
+	// is 1/n!, which is very small for n ~ 20.
+	if sort.IntsAreSorted(a) {
+		return false
 	}
 
 	return true
@@ -288,7 +298,8 @@ func TestShuffleEncryptReceivers(t *testing.T) {
 		receivers = append(receivers, k)
 	}
 
-	shuffled := shuffleEncryptReceivers(receivers)
+	shuffled, err := shuffleEncryptReceivers(receivers)
+	require.NoError(t, err)
 
 	shuffledOrder := getEncryptReceiverOrder(shuffled)
 	requireValidNonTrivialPermutation(t, receiverCount, shuffledOrder)
@@ -1357,4 +1368,262 @@ func TestEncrypt(t *testing.T) {
 		testNoWriteMessage,
 	}
 	runTestsOverVersions(t, "test", tests)
+}
+
+type secretKeyString string
+
+func newRandomSecretKeyString() (secretKeyString, error) {
+	_, sk, err := box.GenerateKey(rand.Reader)
+	if err != nil {
+		return "", err
+	}
+	return secretKeyString(hex.EncodeToString((*sk)[:])), nil
+}
+
+func (s secretKeyString) toSecretKey() (boxSecretKey, error) {
+	decoded, err := hex.DecodeString(string(s))
+	if err != nil {
+		return boxSecretKey{}, err
+	}
+	private := sliceToByte32(decoded)
+	var public [32]byte
+	curve25519.ScalarBaseMult(&public, &private)
+	return boxSecretKey{
+		key: private,
+		pub: boxPublicKey{
+			key: public,
+		},
+	}, nil
+}
+
+func newRandomSecretKeyStrings(n int) ([]secretKeyString, error) {
+	var secretKeyStrings []secretKeyString
+	for i := 0; i < n; i++ {
+		s, err := newRandomSecretKeyString()
+		if err != nil {
+			return nil, err
+		}
+		secretKeyStrings = append(secretKeyStrings, s)
+	}
+	return secretKeyStrings, nil
+}
+
+func secretKeyStringsToPublicKeys(secretKeyStrings []secretKeyString) ([]BoxPublicKey, error) {
+	var publicKeys []BoxPublicKey
+	for _, s := range secretKeyStrings {
+		sk, err := s.toSecretKey()
+		if err != nil {
+			return nil, err
+		}
+		publicKeys = append(publicKeys, sk.GetPublicKey())
+	}
+	return publicKeys, nil
+}
+
+type symmetricKeyString string
+
+func newRandomSymmetricKeyString() (symmetricKeyString, error) {
+	sk, err := newRandomSymmetricKey()
+	if err != nil {
+		return "", err
+	}
+	return symmetricKeyString(hex.EncodeToString((*sk)[:])), nil
+}
+
+func (s symmetricKeyString) toSymmetricKey() (SymmetricKey, error) {
+	decoded, err := hex.DecodeString(string(s))
+	if err != nil {
+		return SymmetricKey{}, err
+	}
+	return sliceToByte32(decoded), nil
+}
+
+type constantEphemeralKeyCreator struct {
+	k boxSecretKey
+}
+
+func (c constantEphemeralKeyCreator) CreateEphemeralKey() (BoxSecretKey, error) {
+	return c.k, nil
+}
+
+type constantEncryptRNG struct {
+	k SymmetricKey
+	p []int
+}
+
+func (c constantEncryptRNG) createSymmetricKey() (*SymmetricKey, error) {
+	return &c.k, nil
+}
+
+func (c constantEncryptRNG) shuffleReceivers(receivers []BoxPublicKey) ([]BoxPublicKey, error) {
+	if !isValidPermutation(len(receivers), c.p) {
+		return nil, fmt.Errorf("invalid permutation for length %d: %+v", len(receivers), c.p)
+	}
+	shuffled := make([]BoxPublicKey, len(receivers))
+	for i := 0; i < len(receivers); i++ {
+		shuffled[i] = receivers[c.p[i]]
+	}
+	return shuffled, nil
+}
+
+// encryptArmor62SealInput encapsulates all the inputs to an
+// encryptArmor62Seal call, including any random state.
+type encryptArmor62SealInput struct {
+	// Normal input parameters to encryptArmor62Seal.
+
+	version   Version
+	plaintext string
+	sender    secretKeyString
+	receivers []secretKeyString
+	brand     string
+
+	// Random state.
+
+	// The convention for permutation is that the ith shuffled
+	// receiver is set to the permutation[i]th entry of receivers.
+	permutation  []int
+	ephemeralKey secretKeyString
+	payloadKey   symmetricKeyString
+}
+
+func newRandomEncryptArmor62SealInput(
+	version Version, plaintext string) (encryptArmor62SealInput, error) {
+	// Hardcoded for now.
+	receiverCount := 3
+	receivers, err := newRandomSecretKeyStrings(receiverCount)
+	if err != nil {
+		return encryptArmor62SealInput{}, err
+	}
+	permutation, err := randomPerm(receiverCount)
+	if err != nil {
+		return encryptArmor62SealInput{}, err
+	}
+	ephemeralKey, err := newRandomSecretKeyString()
+	if err != nil {
+		return encryptArmor62SealInput{}, err
+	}
+	payloadKey, err := newRandomSymmetricKeyString()
+	if err != nil {
+		return encryptArmor62SealInput{}, err
+	}
+	return encryptArmor62SealInput{
+		version:   version,
+		plaintext: plaintext,
+		// Set the sender to the first receiver for now.
+		sender:       receivers[0],
+		receivers:    receivers,
+		permutation:  permutation,
+		ephemeralKey: ephemeralKey,
+		payloadKey:   payloadKey,
+	}, nil
+}
+
+func (i encryptArmor62SealInput) call() (string, error) {
+	sender, err := i.sender.toSecretKey()
+	if err != nil {
+		return "", err
+	}
+	receivers, err := secretKeyStringsToPublicKeys(i.receivers)
+	if err != nil {
+		return "", err
+	}
+	ephemeralKey, err := i.ephemeralKey.toSecretKey()
+	if err != nil {
+		return "", err
+	}
+	payloadKey, err := i.payloadKey.toSymmetricKey()
+	return encryptArmor62Seal(
+		i.version,
+		[]byte(i.plaintext),
+		sender,
+		receivers,
+		constantEphemeralKeyCreator{ephemeralKey},
+		constantEncryptRNG{payloadKey, i.permutation},
+		i.brand)
+}
+
+// encryptArmor62SealResult encapsulates all the inputs and outputs of
+// an encryptArmor62Seal call, including any random state.
+type encryptArmor62SealResult struct {
+	encryptArmor62SealInput
+
+	// Output.
+	armoredCiphertext string
+}
+
+func newRandomEncryptArmor62SealResult(version Version, plaintext string) (encryptArmor62SealResult, error) {
+	input, err := newRandomEncryptArmor62SealInput(version, plaintext)
+	if err != nil {
+		return encryptArmor62SealResult{}, err
+	}
+	armoredCiphertext, err := input.call()
+	if err != nil {
+		return encryptArmor62SealResult{}, err
+	}
+	return encryptArmor62SealResult{
+		encryptArmor62SealInput: input,
+		armoredCiphertext:       armoredCiphertext,
+	}, nil
+}
+
+func testEncryptArmor62SealResultSeal(t *testing.T, result encryptArmor62SealResult) {
+	armoredCiphertext, err := result.encryptArmor62SealInput.call()
+	require.NoError(t, err)
+	require.Equal(t, result.armoredCiphertext, armoredCiphertext)
+}
+
+func TestRandomEncryptArmor62Seal(t *testing.T) {
+	runTestOverVersions(t, func(t *testing.T, version Version) {
+		result, err := newRandomEncryptArmor62SealResult(Version1(), "some plaintext")
+		require.NoError(t, err)
+		testEncryptArmor62SealResultSeal(t, result)
+	})
+}
+
+var v1EncryptArmor62SealResult = encryptArmor62SealResult{
+	encryptArmor62SealInput: encryptArmor62SealInput{
+		version:   Version1(),
+		plaintext: "hardcoded message v1",
+		sender:    "4902237dc127e1cbbd5dbf0b3ce74e751aa6bbfd894f2e1658fb2c7b3b5eb9fc",
+		receivers: []secretKeyString{
+			// sender.
+			"4902237dc127e1cbbd5dbf0b3ce74e751aa6bbfd894f2e1658fb2c7b3b5eb9fc",
+			"3833f2e7bbc09b27713d4b43b03a97df784e7a0c9634d9bb1046a7354b5fa84f",
+			"82f0c46354c69e360d703525a2e0b92e4cb7a64ae23bcbfbc89978ee2772fbc1",
+		},
+		permutation:  []int{1, 2, 0},
+		ephemeralKey: "3f292760d9b325b72816d0576023292ae62d1f4190253eb40b7fcefb3b9ad41a",
+		payloadKey:   "f80645613161cca059b78acda045134c3269376bcdc1b972b2f801f3a2d3d189",
+	},
+
+	armoredCiphertext: `BEGIN SALTPACK ENCRYPTED MESSAGE. kiOUtMhcc4NXXRb XMxIdgQyljprRuP QOicP26XO1b47ju UJnCDGKawXyE0lE CGP8n3qPII9mSJt qGhWH2upu3qr6yp Hvg24Iw295aGKkh fQhfQLJxJsUDR9x y2Gy6bDdEV5qptY HWjTnA0GcyYppOS SAqj0mnNeiau8bH rHTCSlbZTksMWrW 8yPAIrDuED7aB02 489C1vtaaftIWJ9 KfhuUbBL4YjA9pN YktQHwqX7zfJuEd wRhljkatr95Iiu3 1mvalHpDLlweQfd LriDGPdID6Lxy9e GXDznAHzhmHRA3p AtSuyQnPP1qGqgW Xb1gDgazh3C6Ohj 3ztzvuZdrAcGnzd IYFMr9qbtViG8v8 VWYqGIIFKdJtg8A 1MEiLMYzHd32FzH gKv6IvviDpoxpKu Cy5UKSEYxrSD9Pf lxlb8oKKg8j2App 17N21SwbQMpIWAC 56Fez3XmFCMBLp1 F25s8IysZvfRsoo K03mFwSY1s8WJNg utLmu3zfPNLWKBK ij06OwpUtfVVJMe MxNlq1XOsKFTPlD QnPpYyzQXQk5MKW hNiIRfSLuf6Emx0 zw28V3JItBtHGfv A0uYkuXwLVf6g5v 7yedpNQ04RDIWQ1 PDVSJ2z3nCEZALl DBBEo3zVk7Jx56z w8rMGGPP1mVIocY e8wc4dib0sAvfFS 7pW09TVId3jQidj xSOMMoHtCxBPRX9 lHAK4fcoKukg2Oo oizaPpY90MnJaY6 NrzVjAh2fNa7MXd RNzOJiWTLN9lnKz ZYWZ7QxkG790wQ5 8ju5Q2z5EOx1dDV dXAvS7V2HwJFsRI tPSXP84378LucSD oQqfPSz5qg. END SALTPACK ENCRYPTED MESSAGE.
+`,
+}
+
+func TestSealHardcodedEncryptMessageV1(t *testing.T) {
+	testEncryptArmor62SealResultSeal(t, v1EncryptArmor62SealResult)
+}
+
+var v2EncryptArmor62SealResult = encryptArmor62SealResult{
+	encryptArmor62SealInput: encryptArmor62SealInput{
+		version:   Version2(),
+		plaintext: "hardcoded message v2",
+		sender:    "16c22cb65728ded9214c8e4525decc20f6ad95fd43a503deaecdfbcd79d39d15",
+		receivers: []secretKeyString{
+			// sender.
+			"16c22cb65728ded9214c8e4525decc20f6ad95fd43a503deaecdfbcd79d39d15",
+			"fceb2cb2c77b22d47a779461c7a963a11759a3f98a437d542e3cdde5d0c9bea6",
+			"293d2a95a4f6ea3ed0c5213bd9b28b28ecff5c023ad488025e2a789abb773aa5",
+		},
+		permutation:  []int{1, 2, 0},
+		ephemeralKey: "0a3550f22ff82ca7e923ca3363d1556416d8c1df19cc372caf2661ce255f6da0",
+		payloadKey:   "bf5e8f5b61c40895b53d6fa8976c22501a5b6369282e7875e528accc5e9fa70a",
+	},
+
+	armoredCiphertext: `BEGIN SALTPACK ENCRYPTED MESSAGE. kiOUtMhcc4NXXRb XMxIeCbZQsbcx3v DdVJWmdycVgmGAf 0xYSQcw1m5OoJyK bv2fcF6c2IRWvj3 2JrBxsm7P7i0fsI THRJY7du7UnaVzU FdePmD6qEnkJFFy 4NLGYijRmF4uUtE 8vE81Q7wztDuu0g sWpz2gBJWNh0Kz9 JaIgCTaNnkQFtPk hnCev1j9GycswXb DxuJkD6CtlXyWB5 PNLre4awLY5rHcS 8koY3JdVpvse9Y1 RCLRuaEqQkDTHlB XzgjHiZGmuqMwi0 eHWegV3oFvgGXiT CW6EBw7qek9cKZZ ANTpL4vBjcOoi0F elmMolRMkQmEmuX 9EsFVIPjetlyQr8 p2AWoWV12ZWddZe 4u1afhjsQc9BE4e rAWrMjfLKoAoIye QSQuQPDQXsY5mcb vxrZx938UrCewuC hj6kNpfq995o9Zl p35SMAW5K0lzaDh 0Gds5hZft2g94Xf jl7gJWhOkOUkbAs 4PvlKRJS82s5pwo U3qFzsKz2ZJOSrU qbnrr87ppb9ufW9 o36H7hC10tP3nIQ 3elSB3uAammMXAP BduZO4l8LmiwKBt TP1v52Em9ZkJARO pkXTjR8s9mmzjwG 0ZYtt7FN9A1WG1Q d2pHnh2t1X2Kwsb Tb4OBi4mohpNecR ENT3z738L4blLNA JGKR2N73nchK. END SALTPACK ENCRYPTED MESSAGE.
+`,
+}
+
+func TestSealHardcodedEncryptMessageV2(t *testing.T) {
+	testEncryptArmor62SealResultSeal(t, v2EncryptArmor62SealResult)
 }

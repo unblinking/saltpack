@@ -5,15 +5,12 @@ package saltpack
 
 import (
 	"bytes"
-	"encoding/hex"
 	"errors"
 	"io"
 	"io/ioutil"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"golang.org/x/crypto/curve25519"
 )
 
 func TestDecryptVersionValidator(t *testing.T) {
@@ -109,21 +106,30 @@ FuHsCazBwbC8RMw mK04rfrmwew. END KEYBASE SALTPACK ENCRYPTED MESSAGE.
 `
 const hardcodedV1DecryptionKey = "1fcf32dbefa43c1af55f1387b5e30117657a6eb9ef1bbbd4e95b3f1436fc3310"
 
-func TestHardcodedEncryptedMessageV1(t *testing.T) {
-	decoded, err := hex.DecodeString(hardcodedV1DecryptionKey)
+func requireDearmor62DecryptOpenTo(t *testing.T, expectedPlaintext string, version Version, secretKeyString secretKeyString, armoredCiphertext string) {
+	key, err := secretKeyString.toSecretKey()
 	require.NoError(t, err)
-	private := sliceToByte32(decoded)
-	var public [32]byte
-	curve25519.ScalarBaseMult(&public, &private)
-	key := boxSecretKey{
-		key: private,
-		pub: boxPublicKey{
-			key: public,
-		},
-	}
 	keyring := newKeyring()
 	keyring.insert(key)
-	_, plaintext, _, err := Dearmor62DecryptOpen(SingleVersionValidator(Version1()), hardcodedV1EncryptedMessage, keyring)
+	_, plaintext, _, err := Dearmor62DecryptOpen(SingleVersionValidator(version), armoredCiphertext, keyring)
 	require.NoError(t, err)
-	require.Equal(t, "test message!", string(plaintext))
+	require.Equal(t, expectedPlaintext, string(plaintext))
+}
+
+func TestHardcodedEncryptedMessageV1(t *testing.T) {
+	requireDearmor62DecryptOpenTo(t, "test message!", Version1(), hardcodedV1DecryptionKey, hardcodedV1EncryptedMessage)
+}
+
+func testEncryptArmor62SealResultOpen(t *testing.T, result encryptArmor62SealResult) {
+	for _, receiver := range result.receivers {
+		requireDearmor62DecryptOpenTo(t, result.plaintext, result.version, receiver, result.armoredCiphertext)
+	}
+}
+
+func TestOpenHardcodedEncryptMessageV1(t *testing.T) {
+	testEncryptArmor62SealResultOpen(t, v1EncryptArmor62SealResult)
+}
+
+func TestOpenHardcodedEncryptMessageV2(t *testing.T) {
+	testEncryptArmor62SealResultOpen(t, v2EncryptArmor62SealResult)
 }

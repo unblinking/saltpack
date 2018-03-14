@@ -42,7 +42,8 @@ func TestShuffleSigncryptionReceivers(t *testing.T) {
 		receiverSymmetricKeys = append(receiverSymmetricKeys, k)
 	}
 
-	shuffled := shuffleSigncryptReceivers(receiverBoxKeys, receiverSymmetricKeys)
+	shuffled, err := shuffleSigncryptReceivers(receiverBoxKeys, receiverSymmetricKeys)
+	require.NoError(t, err)
 
 	shuffledOrder := getSigncryptionReceiverOrder(shuffled)
 	require.True(t, isValidNonTrivialPermutation(receiverCount, shuffledOrder), "shuffledOrder == %+v is an invalid or trivial permutation", shuffledOrder)
@@ -78,3 +79,6 @@ func TestNewSigncryptSealStreamShuffledReaders(t *testing.T) {
 	shuffledOrder := getEncryptReceiverKeysOrder(header.Receivers)
 	require.True(t, isValidNonTrivialPermutation(receiverCount, shuffledOrder), "shuffledOrder == %+v is an invalid or trivial permutation", shuffledOrder)
 }
+
+// TODO: Add hardcoded signcryption seal/open tests, like
+// Test{Seal,Open}HardcodedEncryptMessageV{1,2}.

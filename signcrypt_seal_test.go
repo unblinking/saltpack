@@ -10,6 +10,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestCheckSigncryptReceiverCount(t *testing.T) {
+	err := checkSigncryptReceiverCount(0, 0)
+	require.Equal(t, ErrBadReceivers, err)
+
+	err = checkSigncryptReceiverCount(1, 0)
+	require.NoError(t, err)
+
+	err = checkSigncryptReceiverCount(0, 1)
+	require.NoError(t, err)
+
+	require.Panics(t, func() {
+		checkSigncryptReceiverCount(-1, 0)
+	})
+	require.Panics(t, func() {
+		checkSigncryptReceiverCount(0, -1)
+	})
+}
+
 func getSigncryptionReceiverOrder(receivers []receiverKeysMaker) []int {
 	order := make([]int, len(receivers))
 	for i, r := range receivers {

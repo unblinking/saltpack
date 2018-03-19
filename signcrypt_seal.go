@@ -6,6 +6,7 @@ package saltpack
 import (
 	"bytes"
 	"crypto/hmac"
+	cryptorand "crypto/rand"
 	"crypto/sha512"
 	"fmt"
 	"io"
@@ -191,13 +192,38 @@ func (r ReceiverSymmetricKey) makeReceiverKeys(ephemeralPriv BoxSecretKey, paylo
 	}
 }
 
+func checkSigncryptReceiverCount(receiverBoxKeyCount, receiverSymmetricKeyCount int) error {
+	c1 := int64(receiverBoxKeyCount)
+	c2 := int64(receiverSymmetricKeyCount)
+	if c1 < 0 {
+		panic("Bogus recieverBoxKeyCount")
+	}
+	if c2 < 0 {
+		panic("Bogus recieverSymmetricKeyCount")
+	}
+	// Handle possible (but unlikely) overflow when adding
+	// together the two sizes.
+	if c1 > maxReceiverCount {
+		return ErrBadReceivers
+	}
+	if c2 > maxReceiverCount {
+		return ErrBadReceivers
+	}
+	c := c1 + c2
+	if c <= 0 || c > maxReceiverCount {
+		return ErrBadReceivers
+	}
+
+	return nil
+}
+
 // checkEncryptReceivers does some sanity checking on the
 // receivers. Check that receivers aren't sent to twice; check that
 // there's at least one receiver and not too many receivers.
 func checkSigncryptReceivers(receiverBoxKeys []BoxPublicKey, receiverSymmetricKeys []ReceiverSymmetricKey) error {
-	receiverCount := len(receiverBoxKeys) + len(receiverSymmetricKeys)
-	if receiverCount <= 0 || receiverCount > maxReceiverCount {
-		return ErrBadReceivers
+	err := checkSigncryptReceiverCount(len(receiverBoxKeys), len(receiverSymmetricKeys))
+	if err != nil {
+		return err
 	}
 
 	// Make sure that each receiver only shows up in the set once.
@@ -228,20 +254,20 @@ func checkSigncryptReceivers(receiverBoxKeys []BoxPublicKey, receiverSymmetricKe
 
 func shuffleSigncryptReceivers(receiverBoxKeys []BoxPublicKey, receiverSymmetricKeys []ReceiverSymmetricKey) ([]receiverKeysMaker, error) {
 	totalLen := len(receiverBoxKeys) + len(receiverSymmetricKeys)
-	order, err := randomPerm(totalLen)
+	shuffled := make([]receiverKeysMaker, totalLen)
+	for i, r := range receiverBoxKeys {
+		shuffled[i] = receiverBoxKey{r}
+	}
+	for i, r := range receiverSymmetricKeys {
+		shuffled[i+len(receiverBoxKeys)] = r
+	}
+	err := csprngShuffle(cryptorand.Reader, len(shuffled), func(i, j int) {
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	receivers := make([]receiverKeysMaker, totalLen)
-	for i, r := range receiverBoxKeys {
-		receivers[order[i]] = receiverBoxKey{r}
-	}
-
-	for i, r := range receiverSymmetricKeys {
-		receivers[order[len(receiverBoxKeys)+i]] = r
-	}
-	return receivers, nil
+	return shuffled, nil
 }
 
 // signcryptRNG is an interface encapsulating all the randomness

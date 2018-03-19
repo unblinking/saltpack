@@ -5,6 +5,7 @@ package saltpack
 
 import (
 	"bytes"
+	cryptorand "crypto/rand"
 	"crypto/sha512"
 	"fmt"
 	"io"
@@ -151,7 +152,8 @@ func checkKnownVersion(version Version) error {
 // receivers. Check that receivers aren't sent to twice; check that
 // there's at least one receiver and not too many receivers.
 func checkEncryptReceivers(receivers []BoxPublicKey) error {
-	if len(receivers) <= 0 || len(receivers) > maxReceiverCount {
+	receiverCount := int64(len(receivers))
+	if receiverCount <= 0 || receiverCount > maxReceiverCount {
 		return ErrBadReceivers
 	}
 
@@ -172,13 +174,13 @@ func checkEncryptReceivers(receivers []BoxPublicKey) error {
 }
 
 func shuffleEncryptReceivers(receivers []BoxPublicKey) ([]BoxPublicKey, error) {
-	order, err := randomPerm(len(receivers))
+	shuffled := make([]BoxPublicKey, len(receivers))
+	copy(shuffled, receivers)
+	err := csprngShuffle(cryptorand.Reader, len(shuffled), func(i, j int) {
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	})
 	if err != nil {
 		return nil, err
-	}
-	shuffled := make([]BoxPublicKey, len(receivers))
-	for i := 0; i < len(receivers); i++ {
-		shuffled[i] = receivers[order[i]]
 	}
 	return shuffled, nil
 }

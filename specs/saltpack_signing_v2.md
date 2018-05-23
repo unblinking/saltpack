@@ -16,7 +16,7 @@ properties on top of a standard NaCl signature:
 
 We define two signing formats: one attached and one detached. The attached
 format will have a header packet and payload packets similar to the encryption
-format, with a final packet flag at the end of the message, and an incrementing
+format, with an incrementing
 counter to prevent reordering. The detached format will contain just a header
 packet, with no payload.
 

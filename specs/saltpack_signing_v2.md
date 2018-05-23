@@ -16,7 +16,7 @@ properties on top of a standard NaCl signature:
 
 We define two signing formats: one attached and one detached. The attached
 format will have a header packet and payload packets similar to the encryption
-format, with an incrementing
+format, with a final packet flag at the end of the message, and an incrementing
 counter to prevent reordering. The detached format will contain just a header
 packet, with no payload.
 
@@ -32,8 +32,7 @@ When encoding strings, byte arrays, or arrays, pick the MessagePack
 encoding that will use the fewest number of bytes.
 
 An attached signature is a header packet, followed by any number of non-empty
-payload packets, followed by an empty payload packet. An attached signing
-header packet is a [MessagePack
+payload packets. An attached signing header packet is a [MessagePack
 array](https://github.com/msgpack/msgpack/blob/master/spec.md) that looks like
 this:
 

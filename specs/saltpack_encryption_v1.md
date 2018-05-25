@@ -70,6 +70,9 @@ An encrypted message is a series of concatenated MessagePack objects. The first
 is a header packet, followed by any number of non-empty payload packets, and
 finally an empty payload packet.
 
+When encoding strings, byte arrays, or arrays, pick the MessagePack
+encoding that will use the fewest number of bytes.
+
 ### Header Packet
 The header packet is a MessagePack array with these contents:
 
@@ -86,9 +89,11 @@ The header packet is a MessagePack array with these contents:
 
 - The **format name** is the string "saltpack".
 - The **version** is a list of the major and minor versions, currently
-  `[1, 0]`.
-- The **mode** is the number 0, for encryption. (1 and 2 are attached and
-  detached signing.)
+  `[1, 0]`, both encoded as
+  [positive fixnums](https://github.com/msgpack/msgpack/blob/master/spec.md#int-format-family).
+- The **mode** is the number 0, for encryption, encoded as a
+[positive fixnum](https://github.com/msgpack/msgpack/blob/master/spec.md#int-format-family).
+  (1 and 2 are attached and detached signing.)
 - The **ephemeral public key** is a NaCl public encryption key, 32 bytes. The
   ephemeral keypair is generated at random by the sender and only used for one
   message.

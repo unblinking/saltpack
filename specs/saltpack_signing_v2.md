@@ -28,6 +28,9 @@ attacker could predict in advance.
 
 ## Attached Implementation
 
+When encoding strings, byte arrays, or arrays, pick the MessagePack
+encoding that will use the fewest number of bytes.
+
 An attached signature is a header packet, followed by any number of non-empty
 payload packets, followed by an empty payload packet. An attached signing
 header packet is a [MessagePack
@@ -45,9 +48,12 @@ this:
 ```
 
 - **format name** is the string "saltpack".
-- **version** is a list of the major and minor versions, currently `[2, 0]`.
-- **mode** is the number 1, for attached signing. (0 is encryption, 2 is
-  detached signing, and 3 is signcryption.)
+- **version** is a list of the major and minor versions, currently
+  `[2, 0]`, both encoded as
+  [positive fixnums](https://github.com/msgpack/msgpack/blob/master/spec.md#int-format-family).
+- **mode** is the number 1, for attached signing, encoded as a
+  [positive fixnum](https://github.com/msgpack/msgpack/blob/master/spec.md#int-format-family).
+  (0 is encryption, 2 is detached signing, and 3 is signcryption.)
 - **sender public key** is the sender's long-term NaCl signing public key, 32 bytes.
 - **nonce** is 32 random bytes.
 

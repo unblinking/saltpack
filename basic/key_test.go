@@ -108,6 +108,30 @@ func testBasicSign(t *testing.T, version saltpack.Version) {
 	}
 }
 
+func TestGetRawKeys(t *testing.T) {
+	kr := NewKeyring()
+	k1, err := kr.GenerateSigningKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(k1.GetRawSecretKey()[:], k1.sec[:]) {
+		t.Fatal("signing secret key mismatch")
+	}
+	if !bytes.Equal(k1.GetRawPublicKey()[:], k1.pub[:]) {
+		t.Fatal("signing public key mismatch")
+	}
+	k2, err := kr.GenerateBoxKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(k2.GetRawSecretKey()[:], k2.sec[:]) {
+		t.Fatal("box secret key mismatch")
+	}
+	if !bytes.Equal(k2.GetRawPublicKey()[:], k2.pub.RawBoxKey[:]) {
+		t.Fatal("box public key mismatch")
+	}
+}
+
 func TestKeyBasic(t *testing.T) {
 	tests := []func(*testing.T, saltpack.Version){
 		testBasicBox,

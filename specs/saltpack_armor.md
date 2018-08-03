@@ -258,14 +258,15 @@ ipsum](https://twitter.com/oconnor663/status/680171387353448448).
 The BaseX payload is surrounded ('framed') by a header and footer. Rules for parsing
 them appear here.
 
-1. Collect input up to the first period. This is the header.
+1. Collect input up to the first period. This is the header. 
 2. Assert that the header matches the regex
    ```
-   ^[>\n\r\t ]*BEGIN[>\n\r\t ]+([a-zA-Z0-9]+[>\n\r\t ]+)?SALTPACK[>\n\r\t ]+(ENCRYPTED[>\n\r\t ]+MESSAGE|SIGNED[>\n\r\t ]+MESSAGE|DETACHED[>\n\r\t ]+SIGNATURE)[>\n\r\t ]*$
+   ^(?=.{1,512}$)[>\n\r\t ]*BEGIN[>\n\r\t ]+([a-zA-Z0-9]{1,128}[>\n\r\t ]+)?SALTPACK[>\n\r\t ]+(ENCRYPTED[>\n\r\t ]+MESSAGE|SIGNED[>\n\r\t ]+MESSAGE|DETACHED[>\n\r\t ]+SIGNATURE)[>\n\r\t ]*$
    ```
    We match against `>` for compatibility with mail clients that use it for quoting.
-   The optional word is an application name (like 'KEYBASE'). The last two words give the
-   mode of the message.
+   The optional word is an application name (like 'KEYBASE'), and cannot be 
+   longer than 128 characters. The last two words give the mode of the message.
+   The whole header cannot be longer than 512 characters.
 3. Collect input up to the second period. This is the payload. If the implementation is
    streaming, it may decode the payload before the following steps.
 4. Collect input up to the third period. This is the footer.

@@ -100,7 +100,7 @@ func TestSlowReader(t *testing.T) {
 	a, err := Armor62Seal(m, MessageTypeEncryption, ourBrand)
 	require.NoError(t, err)
 	sr.buf = []byte(a)
-	dec, frame, err := NewArmor62DecoderStream(&sr)
+	dec, frame, err := NewArmor62DecoderStream(&sr, nil, nil)
 	require.NoError(t, err)
 	m2, err := ioutil.ReadAll(dec)
 	require.NoError(t, err)

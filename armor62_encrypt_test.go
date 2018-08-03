@@ -43,14 +43,12 @@ func testDearmor62DecryptSlowReader(t *testing.T, version Version) {
 	ciphertext, err := EncryptArmor62Seal(version, msg, sndr, receivers, ourBrand)
 	require.NoError(t, err)
 
-	_, dec, frame, err := NewDearmor62DecryptStream(SingleVersionValidator(version), &slowReader{[]byte(ciphertext)}, kr)
+	_, dec, brand, err := NewDearmor62DecryptStream(SingleVersionValidator(version), &slowReader{[]byte(ciphertext)}, kr)
 	require.NoError(t, err)
+	brandCheck(t, brand)
 
 	plaintext, err := ioutil.ReadAll(dec)
 	require.NoError(t, err)
-	brand, err := CheckArmor62Frame(frame, MessageTypeEncryption)
-	require.NoError(t, err)
-	brandCheck(t, brand)
 
 	require.Equal(t, msg, plaintext)
 }

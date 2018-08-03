@@ -33,11 +33,10 @@ const (
 // rest of the message is well formed.
 func IsSaltpackBinary(stream *bufio.Reader) (msgType MessageType, version Version, err error) {
 
-	if stream.Size() < minLengthToIdentifyBinarySaltpack {
+	b, err := stream.Peek(minLengthToIdentifyBinarySaltpack)
+	if err == bufio.ErrBufferFull {
 		return MessageTypeUnknown, Version{}, ErrShortSliceOrBuffer
 	}
-
-	b, err := stream.Peek(minLengthToIdentifyBinarySaltpack)
 	if err != nil {
 		return MessageTypeUnknown, Version{}, err
 	}

@@ -46,9 +46,7 @@ type testEncryptStream struct {
 
 	numBlocks encryptionBlockNumber // the lower 64 bits of the nonce
 
-	didHeader bool
-	eof       bool
-	err       error
+	err error
 }
 
 func (pes *testEncryptStream) Write(plaintext []byte) (int, error) {

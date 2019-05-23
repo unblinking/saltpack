@@ -16,20 +16,17 @@ import (
 )
 
 type signcryptSealStream struct {
-	version         Version
-	output          io.Writer
-	encoder         encoder
-	encryptionKey   SymmetricKey
-	signingKey      SigningSecretKey
-	senderAnonymous bool
-	buffer          bytes.Buffer
-	headerHash      headerHash
+	version       Version
+	output        io.Writer
+	encoder       encoder
+	encryptionKey SymmetricKey
+	signingKey    SigningSecretKey
+	buffer        bytes.Buffer
+	headerHash    headerHash
 
 	numBlocks encryptionBlockNumber // the lower 64 bits of the nonce
 
-	didHeader bool
-	eof       bool
-	err       error
+	err error
 }
 
 func (sss *signcryptSealStream) Write(plaintext []byte) (int, error) {

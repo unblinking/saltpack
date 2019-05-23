@@ -270,8 +270,5 @@ func (enc *Encoding) IsValidEncodingLength(n int) bool {
 	f := func(n int) int {
 		return int(math.Floor(float64(n) * enc.logOfBase / float64(8)))
 	}
-	if f(n) == f(n-1) {
-		return false
-	}
-	return true
+	return f(n) != f(n-1)
 }

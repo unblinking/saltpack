@@ -119,7 +119,7 @@ func (r *keyring) makeIterable() *keyring {
 
 func (r *keyring) LookupBoxSecretKey(kids [][]byte) (int, BoxSecretKey) {
 	for i, kid := range kids {
-		if key, _ := r.keys[hex.EncodeToString(kid)]; key != nil {
+		if key := r.keys[hex.EncodeToString(kid)]; key != nil {
 			if r.bad {
 				return (len(kids)*4 + i), key
 			}
@@ -173,7 +173,6 @@ func (b boxSecretKey) Box(receiver BoxPublicKey, nonce Nonce, msg []byte) []byte
 }
 
 var errPublicKeyDecryptionFailed = errors.New("public key decryption failed")
-var errPublicKeyEncryptionFailed = errors.New("public key encryption failed")
 
 func (b boxSecretKey) Unbox(sender BoxPublicKey, nonce Nonce, msg []byte) ([]byte, error) {
 	out, ok := box.Open([]byte{}, msg, (*[24]byte)(&nonce),
@@ -1538,6 +1537,9 @@ func (i encryptArmor62SealInput) call() (string, error) {
 		return "", err
 	}
 	payloadKey, err := i.payloadKey.toSymmetricKey()
+	if err != nil {
+		return "", err
+	}
 	return encryptArmor62Seal(
 		i.version,
 		[]byte(i.plaintext),

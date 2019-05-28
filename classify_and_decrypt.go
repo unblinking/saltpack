@@ -274,6 +274,6 @@ func ClassifyEncryptedStreamAndMakeDecoder(source io.Reader, decryptionKeyring S
 		}
 		return plainsource, msgType, nil, senderPublic, isArmored, brand, ver, err
 	default:
-		return nil, MessageTypeUnknown, nil, nil, false, "", Version{}, ErrWrongMessageType{}
+		return nil, MessageTypeUnknown, nil, nil, false, "", Version{}, ErrWrongMessageType{MessageTypeEncryption, msgType}
 	}
 }

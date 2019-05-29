@@ -409,12 +409,14 @@ func TestClassifyEncryptedStreamAndMakeDecoder(t *testing.T) {
 	require.Equal(t, Version2(), ver)
 
 	// short message
-	plainSource, msgType, mki, senderPublic, isArmored, brand, ver, err = ClassifyEncryptedStreamAndMakeDecoder(strings.NewReader(ciphertextStr[:20]), keyring, nil)
+	_, _, _, _, _, _, _, err = ClassifyEncryptedStreamAndMakeDecoder(strings.NewReader(ciphertextStr[:20]), keyring, nil)
+	require.Error(t, err)
 	require.Equal(t, ErrShortSliceOrBuffer, err)
 
 	// invalid messages
 	invalid := append([]byte{}, ciphertext...)
 	invalid[0] = 0xff
-	plainSource, msgType, mki, senderPublic, isArmored, brand, ver, err = ClassifyEncryptedStreamAndMakeDecoder(bytes.NewReader(invalid), keyring, nil)
+	_, _, _, _, _, _, _, err = ClassifyEncryptedStreamAndMakeDecoder(bytes.NewReader(invalid), keyring, nil)
+	require.Error(t, err)
 	require.Equal(t, ErrNotASaltpackMessage, err)
 }

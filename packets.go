@@ -10,6 +10,7 @@ import (
 )
 
 type receiverKeys struct {
+	//lint:ignore U1000, field is used for msgpack encoding
 	_struct       bool   `codec:",toarray"`
 	ReceiverKID   []byte `codec:"receiver_key_id"`
 	PayloadKeyBox []byte `codec:"payloadkey"`
@@ -17,6 +18,7 @@ type receiverKeys struct {
 
 // Version is a major.minor pair that shows the version of the whole file
 type Version struct {
+	//lint:ignore U1000, field is used for msgpack encoding
 	_struct bool `codec:",toarray"`
 	Major   int  `codec:"major"`
 	Minor   int  `codec:"minor"`
@@ -35,6 +37,7 @@ func (v Version) String() string {
 // signcryption mode, the sender secretbox contains a *signing* key instead of
 // an encryption key, and the receiver identifier takes a different form.)
 type EncryptionHeader struct {
+	//lint:ignore U1000, field is used for msgpack encoding
 	_struct         bool           `codec:",toarray"`
 	FormatName      string         `codec:"format_name"`
 	Version         Version        `codec:"vers"`
@@ -47,6 +50,7 @@ type EncryptionHeader struct {
 // encryptionBlockV1 contains a block of encrypted data. It contains
 // the ciphertext, and any necessary authentication Tags.
 type encryptionBlockV1 struct {
+	//lint:ignore U1000, field is used for msgpack encoding
 	_struct            bool                   `codec:",toarray"`
 	HashAuthenticators []payloadAuthenticator `codec:"authenticators"`
 	PayloadCiphertext  []byte                 `codec:"ctext"`
@@ -94,6 +98,7 @@ type SigncryptionHeader EncryptionHeader
 
 // signcryptionBlock contains a block of signed and encrypted data.
 type signcryptionBlock struct {
+	//lint:ignore U1000, field is used for msgpack encoding
 	_struct           bool   `codec:",toarray"`
 	PayloadCiphertext []byte `codec:"ctext"`
 	IsFinal           bool   `codec:"final"`
@@ -111,6 +116,7 @@ func (h *SigncryptionHeader) validate() error {
 
 // SignatureHeader is the first packet in a signed message.
 type SignatureHeader struct {
+	//lint:ignore U1000, field is used for msgpack encoding
 	_struct      bool        `codec:",toarray"`
 	FormatName   string      `codec:"format_name"`
 	Version      Version     `codec:"vers"`
@@ -160,6 +166,7 @@ func (h *SignatureHeader) validate(versionValidator VersionValidator, msgType Me
 
 // signatureBlockV1 contains a block of signed data.
 type signatureBlockV1 struct {
+	//lint:ignore U1000, field is used for msgpack encoding
 	_struct      bool   `codec:",toarray"`
 	Signature    []byte `codec:"signature"`
 	PayloadChunk []byte `codec:"payload_chunk"`

@@ -359,6 +359,7 @@ func TestSigncryptionStream(t *testing.T) {
 	require.NoError(t, err)
 
 	_, reader, err := NewSigncryptOpenStream(bytes.NewBuffer(sealed), keyring, nil)
+	require.NoError(t, err)
 
 	// Read out all the bytes one at a time, to exercise the buffering logic.
 	output := []byte{}
@@ -386,6 +387,7 @@ func TestSigncryptionStreamWithError(t *testing.T) {
 	sealed[len(sealed)-1] ^= 1
 
 	_, reader, err := NewSigncryptOpenStream(bytes.NewBuffer(sealed), keyring, nil)
+	require.NoError(t, err)
 
 	// Try to read the whole thing. This should return an error.
 	_, err = ioutil.ReadAll(reader)
@@ -432,7 +434,6 @@ func TestSigncryptionBoxKeyHeaderDecryptionError(t *testing.T) {
 // As above, but the symmetric recipient type.
 func TestSigncryptionResolvedKeyHeaderDecryptionError(t *testing.T) {
 	msg := []byte("hello world")
-	keyring := makeEmptyKeyring(t)
 	keyring, receiverBoxKeys := makeKeyringWithOneKey(t)
 	senderSigningPrivKey := makeSigningKey(t, keyring)
 	sealed, err := SigncryptSeal(msg, ephemeralKeyCreator{}, senderSigningPrivKey, receiverBoxKeys, nil)

@@ -13,6 +13,8 @@ before_install:
   - go get github.com/axw/gocov/gocov
   - go get github.com/modocache/gover
 script:
+  # staticcheck only works for two newest go versions
+  - if [[ "$(go version)" =~ go1.1[12] ]]; then go get honnef.co/go/tools/cmd/staticcheck && staticcheck ./... && echo "staticcheck complete"; fi
   - go vet ./...
   - golint ./...
   - go test -coverprofile=basic.coverprofile ./basic

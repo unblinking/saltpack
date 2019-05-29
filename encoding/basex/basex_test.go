@@ -6,8 +6,9 @@ package basex
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"sync"
 	"testing"
+
+	"golang.org/x/sync/errgroup"
 )
 
 func decode(strict bool, dst, src []byte) (int, error) {
@@ -111,18 +112,17 @@ func BenchmarkDecodeBase62(b *testing.B) {
 
 func TestConcurrent(t *testing.T) {
 	encoder := Base62StdEncodingStrict
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
+	eg := errgroup.Group{}
+	eg.Go(func() error {
 		for i := 0; i < 2000; i++ {
 			s := encoder.EncodeToString([]byte("testing"))
 			_, decodeErr := encoder.DecodeString(s)
 			if decodeErr != nil {
-				t.Fatalf("%+v", decodeErr)
+				return decodeErr
 			}
 		}
-		wg.Done()
-	}()
+		return nil
+	})
 	for i := 0; i < 2000; i++ {
 		s := encoder.EncodeToString([]byte("testing"))
 		_, decodeErr := encoder.DecodeString(s)
@@ -130,5 +130,8 @@ func TestConcurrent(t *testing.T) {
 			t.Fatalf("%+v", decodeErr)
 		}
 	}
-	wg.Wait()
+	err := eg.Wait()
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
 }

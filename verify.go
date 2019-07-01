@@ -21,7 +21,7 @@ func NewVerifyStream(versionValidator VersionValidator, r io.Reader, keyring Sig
 	}
 	skey = keyring.LookupSigningPublicKey(s.header.SenderPublic)
 	if skey == nil {
-		return nil, nil, ErrNoSenderKey
+		return nil, nil, ErrNoSenderKey{Sender: s.header.SenderPublic}
 	}
 	s.publicKey = skey
 	return skey, newChunkReader(s), nil
@@ -64,7 +64,7 @@ func VerifyDetachedReader(versionValidator VersionValidator, message io.Reader, 
 	// Get the public key.
 	skey = keyring.LookupSigningPublicKey(s.header.SenderPublic)
 	if skey == nil {
-		return nil, ErrNoSenderKey
+		return nil, ErrNoSenderKey{Sender: s.header.SenderPublic}
 	}
 
 	// Compute the signed text hash, without requiring us to copy the whole

@@ -51,7 +51,7 @@ func TestDecryptNoSender(t *testing.T) {
 
 	// Open with only (reciever) key in keyring (not sender)
 	sender, msg, openErr := SigncryptOpen(sealed, bobKeyring, nil)
-	require.Equal(t, openErr, ErrNoSenderKey)
+	require.Equal(t, openErr, ErrNoSenderKey{Sender: aliceSigningPrivKey.GetPublicKey().ToKID()})
 	require.Nil(t, sender)
 	require.Empty(t, msg)
 

@@ -35,3 +35,30 @@ func TestDecryptErrorAtEOF(t *testing.T) {
 	// message should still compare equal to the original input.
 	require.Equal(t, plaintext, msg)
 }
+
+func TestDecryptNoSender(t *testing.T) {
+	plaintext := randomMsg(t, 128)
+
+	aliceSigningPrivKey := makeSigningSecretKey(t)
+
+	bobKeyring := makeEmptyKeyring(t)
+	bobBoxKey, createErr := createEphemeralKey(false)
+	require.NoError(t, createErr)
+	bobKeyring.insert(bobBoxKey)
+
+	sealed, err := SigncryptSeal(plaintext, ephemeralKeyCreator{}, aliceSigningPrivKey, []BoxPublicKey{bobBoxKey.GetPublicKey()}, nil)
+	require.NoError(t, err)
+
+	// Open with only (reciever) key in keyring (not sender)
+	sender, msg, openErr := SigncryptOpen(sealed, bobKeyring, nil)
+	require.Equal(t, openErr, ErrNoSenderKey)
+	require.Nil(t, sender)
+	require.Empty(t, msg)
+
+	// Add signing key and try open again
+	bobKeyring.insertSigningKey(aliceSigningPrivKey)
+	sender2, msg2, openErr2 := SigncryptOpen(sealed, bobKeyring, nil)
+	require.NoError(t, openErr2)
+	require.Equal(t, plaintext, msg2)
+	require.Equal(t, sender2.ToKID(), aliceSigningPrivKey.GetPublicKey().ToKID())
+}

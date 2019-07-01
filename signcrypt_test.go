@@ -53,7 +53,13 @@ func makeKeyringWithOneKey(t *testing.T) (*keyring, []BoxPublicKey) {
 	return keyring, receiverBoxKeys
 }
 
-func makeSigningKey(t *testing.T, keyring *keyring) *sigPrivKey {
+func makeSigningKey(t *testing.T, keyring *keyring) SigningSecretKey {
+	k := makeSigningSecretKey(t)
+	keyring.insertSigningKey(k)
+	return k
+}
+
+func makeSigningSecretKey(t *testing.T) SigningSecretKey {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +68,6 @@ func makeSigningKey(t *testing.T, keyring *keyring) *sigPrivKey {
 		public:  newSigPubKey(pub),
 		private: priv,
 	}
-	keyring.insertSigningKey(k)
 	return k
 }
 

@@ -213,6 +213,9 @@ func (sos *signcryptOpenStream) processBlock(payloadCiphertext []byte, isFinal b
 	// convention the signature bytes are all zeroes, but here we ignore them.
 	if !sos.senderAnonymous {
 		signatureInput := computeSigncryptionSignatureInput(sos.headerHash, nonce, isFinal, chunkPlaintext)
+		if sos.signingPublicKey == nil {
+			return nil, ErrNoSenderKey
+		}
 		sigErr := sos.signingPublicKey.Verify(signatureInput, detachedSig[:])
 		if sigErr != nil {
 			return nil, ErrBadSignature

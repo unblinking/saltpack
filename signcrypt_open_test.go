@@ -47,7 +47,7 @@ func TestDecryptNoKey(t *testing.T) {
 	// Open with empty keyring
 	emptyKeyring := makeEmptyKeyring(t)
 	sender, msg, openErr := SigncryptOpen(sealed, emptyKeyring, nil)
-	require.EqualError(t, openErr, "no decryption key found for message")
+	require.Equal(t, openErr, ErrNoDecryptionKey)
 	require.Nil(t, sender)
 	require.Empty(t, msg)
 }

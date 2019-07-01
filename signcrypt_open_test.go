@@ -35,3 +35,19 @@ func TestDecryptErrorAtEOF(t *testing.T) {
 	// message should still compare equal to the original input.
 	require.Equal(t, plaintext, msg)
 }
+
+func TestDecryptNoKey(t *testing.T) {
+	plaintext := randomMsg(t, 128)
+	keyring, receiverBoxKeys := makeKeyringWithOneKey(t)
+	senderSigningPrivKey := makeSigningKey(t, keyring)
+
+	sealed, err := SigncryptSeal(plaintext, ephemeralKeyCreator{}, senderSigningPrivKey, receiverBoxKeys, nil)
+	require.NoError(t, err)
+
+	// Open with empty keyring
+	emptyKeyring := makeEmptyKeyring(t)
+	sender, msg, openErr := SigncryptOpen(sealed, emptyKeyring, nil)
+	require.EqualError(t, openErr, "no decryption key found for message")
+	require.Nil(t, sender)
+	require.Empty(t, msg)
+}

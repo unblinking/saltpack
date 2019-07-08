@@ -958,7 +958,7 @@ func testNoSenderKey(t *testing.T, version Version) {
 	})
 	require.NoError(t, err)
 	_, _, err = Open(SingleVersionValidator(version), ciphertext, kr)
-	require.Equal(t, ErrNoSenderKey, err)
+	require.Equal(t, ErrNoSenderKey{Sender: sender.GetPublicKey().ToKID()}, err)
 }
 
 func testSealAndOpenTrailingGarbage(t *testing.T, version Version) {

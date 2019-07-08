@@ -92,7 +92,7 @@ func testVerifyEmptyKeyring(t *testing.T, version Version) {
 	require.NoError(t, err)
 
 	_, _, err = Verify(SingleVersionValidator(version), smsg, emptySigKeyring{})
-	require.Equal(t, ErrNoSenderKey, err)
+	require.Equal(t, ErrNoSenderKey{Sender: key.GetPublicKey().ToKID()}, err)
 }
 
 func testVerifyDetachedEmptyKeyring(t *testing.T, version Version) {
@@ -102,7 +102,7 @@ func testVerifyDetachedEmptyKeyring(t *testing.T, version Version) {
 	require.NoError(t, err)
 
 	_, err = VerifyDetached(SingleVersionValidator(version), msg, sig, emptySigKeyring{})
-	require.Equal(t, ErrNoSenderKey, err)
+	require.Equal(t, ErrNoSenderKey{Sender: key.GetPublicKey().ToKID()}, err)
 }
 
 func testVerifyErrorAtEOF(t *testing.T, version Version) {

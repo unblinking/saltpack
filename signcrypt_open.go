@@ -185,7 +185,11 @@ func (sos *signcryptOpenStream) processHeader(hdr *SigncryptionHeader) error {
 		sos.senderAnonymous = true
 	} else {
 		// regular mode, with a real signing public key
-		sos.signingPublicKey = sos.keyring.LookupSigningPublicKey(senderKeySlice)
+		spk := sos.keyring.LookupSigningPublicKey(senderKeySlice)
+		if spk == nil {
+			return ErrNoSenderKey{Sender: senderKeySlice}
+		}
+		sos.signingPublicKey = spk
 	}
 
 	return nil

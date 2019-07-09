@@ -112,6 +112,10 @@ func (sos *signcryptOpenStream) trySharedSymmetricKeys(hdr *SigncryptionHeader, 
 		identifiers = append(identifiers, receiver.ReceiverKID)
 	}
 
+	if sos.resolver == nil {
+		return nil, nil
+	}
+
 	resolvedKeys, err := sos.resolver.ResolveKeys(identifiers)
 	if err != nil {
 		return nil, err

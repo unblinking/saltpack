@@ -36,6 +36,23 @@ func TestDecryptErrorAtEOF(t *testing.T) {
 	require.Equal(t, plaintext, msg)
 }
 
+
+func TestDecryptNoKey(t *testing.T) {
+	plaintext := randomMsg(t, 128)
+	keyring, receiverBoxKeys := makeKeyringWithOneKey(t)
+	senderSigningPrivKey := makeSigningKey(t, keyring)
+
+	sealed, err := SigncryptSeal(plaintext, ephemeralKeyCreator{}, senderSigningPrivKey, receiverBoxKeys, nil)
+	require.NoError(t, err)
+
+	// Open with empty keyring
+	emptyKeyring := makeEmptyKeyring(t)
+	sender, msg, openErr := SigncryptOpen(sealed, emptyKeyring, nil)
+	require.Equal(t, openErr, ErrNoDecryptionKey)
+	require.Nil(t, sender)
+	require.Empty(t, msg)
+}
+
 func TestDecryptNoSender(t *testing.T) {
 	plaintext := randomMsg(t, 128)
 

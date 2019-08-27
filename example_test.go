@@ -90,7 +90,10 @@ func ExampleNewEncryptArmor62Stream() {
 		return
 	}
 	// Write plaintext into the returned WriteCloser stream
-	input.Write([]byte(plaintext))
+	_, err = input.Write([]byte(plaintext))
+	if err != nil {
+		return
+	}
 	// And close when we're done
 	input.Close()
 
@@ -103,7 +106,10 @@ func ExampleNewEncryptArmor62Stream() {
 
 	// Copy all of the data out of the output decrypted stream, and into standard
 	// output, here for testing / comparison purposes.
-	io.Copy(os.Stdout, plaintextOutput)
+	_, err = io.Copy(os.Stdout, plaintextOutput)
+	if err != nil {
+		return
+	}
 	os.Stdout.Write([]byte{'\n'})
 
 	// Output:
@@ -180,7 +186,10 @@ func ExampleNewSignArmor62Stream() {
 	}
 
 	// Write the message into the input stream, and then close
-	input.Write(msg)
+	_, err = input.Write(msg)
+	if err != nil {
+		return
+	}
 	input.Close()
 
 	// The verified message. We pass the signed stream as the first argument
@@ -200,8 +209,14 @@ func ExampleNewSignArmor62Stream() {
 
 	// Copy all of the data out of the verified stream, and into standard
 	// output, here for testing / comparison purposes.
-	io.Copy(os.Stdout, verifiedStream)
-	os.Stdout.Write([]byte{'\n'})
+	_, err = io.Copy(os.Stdout, verifiedStream)
+	if err != nil {
+		return
+	}
+	_, err = os.Stdout.Write([]byte{'\n'})
+	if err != nil {
+		return
+	}
 
 	// Output:
 	// The right key

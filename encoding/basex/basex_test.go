@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -101,12 +102,14 @@ func TestBadEncodings(t *testing.T) {
 
 func BenchmarkDecodeBase62(b *testing.B) {
 	r := make([]byte, 1024*1024*16) // 16 MB of data
-	rand.Read(r)
+	_, err := rand.Read(r)
+	require.NoError(b, err)
 	data := Base62StdEncoding.EncodeToString(r)
 	b.ResetTimer()
 	b.SetBytes(int64(len(data)))
 	for i := 0; i < b.N; i++ {
-		Base62StdEncoding.DecodeString(data)
+		_, err = Base62StdEncoding.DecodeString(data)
+		require.NoError(b, err)
 	}
 }
 

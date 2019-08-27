@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -322,7 +323,8 @@ func testSignAttachedVerifyDetached(t *testing.T, version Version) {
 
 func testSignBadKey(t *testing.T, version Version) {
 	key := newSigPrivKey(t)
-	csprngRead(key.private[:])
+	err := csprngRead(key.private[:])
+	require.NoError(t, err)
 	msg := randomMsg(t, 128)
 	smsg, err := Sign(version, msg, key)
 	if err != nil {

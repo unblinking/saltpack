@@ -969,7 +969,8 @@ func testSealAndOpenTrailingGarbage(t *testing.T, version Version) {
 	require.NoError(t, err)
 	var buf bytes.Buffer
 	buf.Write(ciphertext)
-	newEncoder(&buf).Encode(randomMsg(t, 14))
+	err = newEncoder(&buf).Encode(randomMsg(t, 14))
+	require.NoError(t, err)
 	_, _, err = Open(SingleVersionValidator(version), buf.Bytes(), kr)
 	require.Equal(t, ErrTrailingGarbage, err)
 }

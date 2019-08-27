@@ -181,9 +181,6 @@ func (pes *testEncryptStream) init(
 		}
 
 		payloadKeyBox := ephemeralKey.Box(receiver, nonceTmp, payloadKeySlice)
-		if err != nil {
-			return err
-		}
 
 		keys := receiverKeys{
 			PayloadKeyBox: payloadKeyBox,

@@ -132,8 +132,14 @@ func (sos *signcryptOpenStream) trySharedSymmetricKeys(hdr *SigncryptionHeader, 
 
 		// We got a key. It should decrypt the corresponding receiver secretbox.
 		derivedKeyDigest := hmac.New(sha512.New, []byte(signcryptionSymmetricKeyContext))
-		derivedKeyDigest.Write(ephemeralPub.ToKID())
-		derivedKeyDigest.Write(resolved[:])
+		_, err = derivedKeyDigest.Write(ephemeralPub.ToKID())
+		if err != nil {
+			return nil, err
+		}
+		_, err = derivedKeyDigest.Write(resolved[:])
+		if err != nil {
+			return nil, err
+		}
 		derivedKey, err := rawBoxKeyFromSlice(derivedKeyDigest.Sum(nil)[0:32])
 		if err != nil {
 			panic(err) // should be statically impossible, if the slice above is the right length

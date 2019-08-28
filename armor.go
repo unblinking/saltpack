@@ -40,10 +40,10 @@ type armorEncoderStream struct {
 func (s *armorEncoderStream) Write(b []byte) (n int, err error) {
 	n, err = s.encoder.Write(b)
 	if err != nil {
-		return 0, err
+		return n, err
 	}
 	if err := s.spaceAndOutputBuffer(); err != nil {
-		return 0, err
+		return n, err
 	}
 	return n, nil
 }

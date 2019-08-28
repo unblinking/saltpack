@@ -17,6 +17,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 type testpair struct {
@@ -90,7 +92,8 @@ func TestEncoder(t *testing.T) {
 	for _, p := range pairs {
 		bb := &bytes.Buffer{}
 		encoder := NewEncoder(Base58StdEncoding, bb)
-		encoder.Write([]byte(p.decoded))
+		_, err := encoder.Write([]byte(p.decoded))
+		require.NoError(t, err)
 		encoder.Close()
 		testEqual(t, "Encode(%q) = %q, want %q", p.decoded, bb.String(), p.encoded)
 	}
@@ -107,6 +110,7 @@ func TestEncoderBuffering(t *testing.T) {
 				end = len(input)
 			}
 			n, err := encoder.Write(input[pos:end])
+			require.NoError(t, err)
 			testEqual(t, "Write(%q) gave error %v, want %v", input[pos:end], err, error(nil))
 			testEqual(t, "Write(%q) gave length %v, want %v", input[pos:end], n, end-pos)
 		}
@@ -356,6 +360,7 @@ func BenchmarkDecodeString(b *testing.B) {
 	data := Base58StdEncoding.EncodeToString(make([]byte, 8192))
 	b.SetBytes(int64(len(data)))
 	for i := 0; i < b.N; i++ {
-		Base58StdEncoding.DecodeString(data)
+		_, err := Base58StdEncoding.DecodeString(data)
+		require.NoError(b, err)
 	}
 }

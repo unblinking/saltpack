@@ -313,6 +313,7 @@ func TestClassifyStream(t *testing.T) {
 	require.True(t, armored)
 	require.Equal(t, ourBrand, brand)
 	require.Equal(t, MessageTypeDetachedSignature, typ)
+	require.Equal(t, Version2(), ver)
 
 	// short message
 	armored, brand, typ, ver, err = ClassifyStream(bufio.NewReaderSize(bytes.NewReader(dsig), 5))

@@ -115,7 +115,8 @@ func testCSPRNGUint32nUniform(t *testing.T, n uint32) {
 				}
 
 				binary.BigEndian.PutUint32(buf[:], uint32(j))
-				r.Seek(0, io.SeekStart)
+				_, err := r.Seek(0, io.SeekStart)
+				require.NoError(t, err)
 				m, err := csprngUint32n(r, n)
 				if err != nil {
 					require.Equal(t, io.EOF, err)
@@ -212,9 +213,10 @@ func testCSPRNGShuffle(t *testing.T, size int) {
 	})
 
 	r := bytes.NewReader(sourceExpected.read)
-	csprngShuffle(r, len(output), func(i, j int) {
+	err := csprngShuffle(r, len(output), func(i, j int) {
 		output[i], output[j] = output[j], output[i]
 	})
+	require.NoError(t, err)
 
 	require.Equal(t, expectedOutput, output)
 	require.Equal(t, 0, r.Len())

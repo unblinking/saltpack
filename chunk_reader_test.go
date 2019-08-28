@@ -265,6 +265,6 @@ func TestChunkReaderBadChunker(t *testing.T) {
 	r := newChunkReader(badChunker{})
 
 	require.Panics(t, func() {
-		r.Read(nil)
+		_, _ = r.Read(nil)
 	})
 }

@@ -21,10 +21,10 @@ func TestCheckSigncryptReceiverCount(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Panics(t, func() {
-		checkSigncryptReceiverCount(-1, 0)
+		_ = checkSigncryptReceiverCount(-1, 0)
 	})
 	require.Panics(t, func() {
-		checkSigncryptReceiverCount(0, -1)
+		_ = checkSigncryptReceiverCount(0, -1)
 	})
 }
 

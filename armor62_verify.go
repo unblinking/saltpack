@@ -34,11 +34,12 @@ func NewDearmor62VerifyStream(versionValidator VersionValidator, r io.Reader, ke
 	if err != nil {
 		return nil, nil, "", err
 	}
-	skey, vs, err = NewVerifyStream(versionValidator, dearmored, keyring)
+	brand, err = frame.GetBrand()
 	if err != nil {
 		return nil, nil, "", err
 	}
-	if brand, err = frame.GetBrand(); err != nil {
+	skey, vs, err = NewVerifyStream(versionValidator, dearmored, keyring)
+	if err != nil {
 		return nil, nil, "", err
 	}
 	return skey, vs, brand, nil
@@ -54,6 +55,7 @@ func Dearmor62Verify(versionValidator VersionValidator, signedMsg string, keyrin
 	}
 
 	verifiedMsg, err = ioutil.ReadAll(stream)
+
 	if err != nil {
 		return nil, nil, "", err
 	}

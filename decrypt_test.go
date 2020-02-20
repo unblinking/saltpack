@@ -120,6 +120,27 @@ func TestHardcodedEncryptedMessageV1(t *testing.T) {
 	requireDearmor62DecryptOpenTo(t, "test message!", Version1(), hardcodedV1DecryptionKey, hardcodedV1EncryptedMessage)
 }
 
+func TestBadEncryptedMessages(t *testing.T) {
+
+	// expect "bad framing" error if trying to decrypt a signed message
+	signedMessage := `
+BEGIN KEYBASE SALTPACK SIGNED MESSAGE. kXR7VktZdyH7rvq v5wcIkHbsMGwMrf
+bu4PmUTnBUI2QWi Nu9smFqPCiRfB9h PAUmWFHLkTKGMdN tdrKMtkDu0UhJEj 7gM6Tt8OeykFHq9
+R4FnzgakB19YwYa CGVfWxxXpK9OaMI S00BurzWOWBXIxe EoTHvgyx1oHUVdX HRNjJCXTvsSJVa8
+Qyg3bN37HAfS8ek gZG6JflV06S2Olp gLdhxNZKIo2zF9P sD5pDFXvoVVzeNC D4vZtMiNQrniEYo
+qY903nTYqyGQ4yl UULZ6yP14CcSPfg 8r8CXVi5Z2. END KEYBASE SALTPACK SIGNED
+MESSAGE.
+`
+
+	key, err := secretKeyString(hardcodedV1DecryptionKey).toSecretKey()
+	require.NoError(t, err)
+	keyring := newKeyring()
+	keyring.insert(key)
+	_, _, _, err = Dearmor62DecryptOpen(SingleVersionValidator(Version1()), signedMessage, keyring)
+	require.Error(t, err)
+	require.IsType(t, ErrBadFrame{}, err)
+}
+
 func testEncryptArmor62SealResultOpen(t *testing.T, result encryptArmor62SealResult) {
 	for _, receiver := range result.receivers {
 		requireDearmor62DecryptOpenTo(t, result.plaintext, result.version, receiver, result.armoredCiphertext)

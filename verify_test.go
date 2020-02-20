@@ -164,6 +164,31 @@ func TestHardcodedSignedMessageV1(t *testing.T) {
 	require.Equal(t, decodedKey, signer.ToKID())
 }
 
+func TestBadSignedMessages(t *testing.T) {
+	// expect "bad framing" error if trying to verify an encrypted message
+	encryptedMessage := `
+BEGIN KEYBASE SALTPACK ENCRYPTED MESSAGE. kiPgBwdlv6bV9N8 dSkCbjKrku5ZO7I
+sQfGHBd7ZxroT7P 1oooGf4WjNkflSq ujGii7s89UFEybr MCxPEHJ7oOvWtnu Hos4mnLWEggEbcO
+1799w2eUijCv0AO E4GK7kPKPSFiF5m enAE17GVaRn34Vv wlwxB9LgFzNfg4m D03qjZnVIeBstvT
+TGBDN7BnaSiUjW4 Ao0VbJmjuwI2gqt BqTefCIubT0ZvxO zFN8PAoclVLLbWf pPgjOB7eVp3Bbnq
+6nhA8Ql55rMNEx8 9XOTpJh4yJBzA5E rpiLelEIo0LfHMA 4WEI2Lk1FXF3txw LPSWpzStekiIImR
+tY2Uhf7hcRZFs1P yRr4WYFoWpjotGA 2k6S0L8QHGPbsGl jJKz5m1at0o8XxA MrWrtBnOmkK1kgS
+TNm9UX5DiaVxyJ8 4JKgJVTt8JxMacq 37vn4jogmZJr45r gNSrakw8sFv8CaD xMNXqUWkhQ9U8ZI
+N1ePua5gTPaECSD ZonBMFRUDpHBFHQ z7hhFmOww4qkUXm xQdpNDg9Ex7YvRT 0CPvP9FsEelrNFH
+4xiDSnDAYMguoC6 yC5YmGrYxusmfWC 7CAMYK0lQuuIucF aZCvYRTGRjDj0BA 8vvlXPHcjkyE956
+RPY6fYiwVBf2dZg 8lRgd4NjOHdz6v9 6vt3nHGx4ZiUUNT 70xwTjNVIVbH5kV UTI0igySEhyh49z
+X5rcwPdcuA2zO4d nyrYEqrAT55ZPsp stRGwbHgQRm36wD c06Z4xYUJv5AtUr R02MT9AqytNeLvu
+KvYolx5Wlm95FtR k6EaQ0hfC4oS1nF 6qRgICgl4JaSLBi baciijBMud23IJg aOHE9dR9ZnGJsLm
+tgDdKRzle5KLksB sSZiiGKf5uAFr9A Tx9JhFZv3B9GP5v 2s3U289T97Y0hhS UEcuMcyDSbyOLko
+dSbguBO4iKLGL6A T1lPhaCzg4n4vZv wW3qEKEflxsRu8O GoS5bg3586PGYP6 UlTCS6uZDZDvZpa
+FuHsCazBwbC8RMw mK04rfrmwew. END KEYBASE SALTPACK ENCRYPTED MESSAGE.
+`
+
+	_, _, _, err := Dearmor62Verify(SingleVersionValidator(Version1()), encryptedMessage, pubkeyOnlySigKeyring{})
+	require.Error(t, err)
+	require.IsType(t, ErrBadFrame{}, err)
+}
+
 const hardcodedV1DetachedSignature = `
 BEGIN KEYBASE SALTPACK DETACHED SIGNATURE. kXR7VktZdyH7rvq v5wcIkPOwOUCix9
 HfoZZdGgIjzeYWi Nu9smFqPCiRfB9h PAUmWFHLkUaLXQd DTZrK37uaKi9dgf 60zJCgqbheQLTVP

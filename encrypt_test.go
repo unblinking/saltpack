@@ -929,8 +929,8 @@ func testCorruptHeader(t *testing.T, version Version) {
 	require.NoError(t, err)
 	_, _, err = Open(SingleVersionValidator(version), ciphertext, kr)
 	require.Equal(t, ErrWrongMessageType{
-		wanted:   MessageTypeEncryption,
-		received: MessageTypeAttachedSignature,
+		Wanted:   MessageTypeEncryption,
+		Received: MessageTypeAttachedSignature,
 	}, err)
 
 	// Corrupt Header after packing

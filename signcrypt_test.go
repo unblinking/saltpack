@@ -552,7 +552,7 @@ func TestSigncryptionWrongMessageType(t *testing.T) {
 	})
 
 	_, _, err = SigncryptOpen(badSealed, keyring, nil)
-	require.Equal(t, ErrWrongMessageType{wanted: MessageTypeSigncryption, received: MessageTypeAttachedSignature}, err)
+	require.Equal(t, ErrWrongMessageType{Wanted: MessageTypeSigncryption, Received: MessageTypeAttachedSignature}, err)
 }
 
 func TestSigncryptionCrazyMessageVersion(t *testing.T) {

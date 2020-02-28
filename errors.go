@@ -99,8 +99,8 @@ type ErrRepeatedKey []byte
 // ErrWrongMessageType is produced if one packet tag was expected, but a packet
 // of another tag was found.
 type ErrWrongMessageType struct {
-	wanted   MessageType
-	received MessageType
+	Wanted   MessageType
+	Received MessageType
 }
 
 // ErrBadVersion is returned if a packet of an unsupported version is found.
